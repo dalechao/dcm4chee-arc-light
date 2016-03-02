@@ -687,6 +687,7 @@ myApp.controller("DeviceController", function($scope, $http, $timeout, $log, cfp
         }
         $scope.selectedElement  = "device";
         // $scope.activeMenu       = "";
+        $scope.validForm        = true;
         $scope.showCancel       = false;
         // $scope.showSave         = false;
         // $scope.lastBorder       = "";
