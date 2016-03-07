@@ -195,6 +195,9 @@ device and create an other one with the new name*/
   #add_dropdowns .form-control.active_menu {
     width: 65%; }
 
+.col-md-5.active_border {
+  width: 48%; }
+
 .more_menu {
   display: block;
   width: 8%;
@@ -389,5 +392,197 @@ device and create an other one with the new name*/
 } */
 .scroll_up:hover {
   background: black none repeat scroll 0 0; }
+
+table.subtable_1, table.subtable_2 {
+  width: 100%; }
+  table.subtable_1, table.subtable_1 th, table.subtable_1 tr, table.subtable_1 td, table.subtable_2, table.subtable_2 th, table.subtable_2 tr, table.subtable_2 td {
+    border: 1px solid #ddd; }
+  table.subtable_1 tr, table.subtable_2 tr {
+    height: 30px; }
+
+/* 
+.div-table{
+	  display:table;         
+	  width:100%;         
+	  background-color:#eee;         
+	  border:1px solid  #666666;         
+	  border-spacing:5px;
+	.thead, .tbody{
+		display: table;
+		width:100%;
+	}
+	.thead{
+		.th{
+			width:10%;
+		}
+	}
+	.tr_row{
+	  display:table-row;
+	  width:auto;
+	  clear:both;
+	      text-align: justify;
+	    -ms-text-justify: distribute-all-lines;
+	    text-justify: distribute-all-lines;
+	}
+	.td_cell, .th{
+	  float:left;
+	  display:table-column;         
+	  width:9%;         
+	  background-color:#ccc;  
+	  empty-cells: show;
+	}
+} */
+.div-table .thead .td_cell {
+  font-size: 14px;
+  height: 30px;
+  line-height: 30px;
+  padding-left: 7px;
+  vertical-align: middle; }
+.div-table .thead .tr_row {
+  display: inline-block;
+  width: 100%;
+  background: #666;
+  color: white; }
+  .div-table .thead .tr_row .th {
+    border: 1px solid #ddd;
+    float: left;
+    height: 30px;
+    line-height: 30px;
+    padding-left: 7px;
+    width: 10%; }
+    .div-table .thead .tr_row .th button {
+      color: white; }
+
+.tbody {
+  border: 1px solid #ddd;
+  float: left;
+  width: 100%; }
+
+.repeat1 .tr_row .td_row .td_cell {
+  float: left;
+  width: 10.3%; }
+  .repeat1 .tr_row .td_row .td_cell:last-child {
+    border-right: 0; }
+  .repeat1 .tr_row .td_row .td_cell .th {
+    float: left; }
+.repeat1 .colcell {
+  width: 3%;
+  float: left;
+  text-align: center;
+  height: 30px;
+  line-height: 30px; }
+.repeat1 .tr_row .td_row .td_cell.table_btn {
+  background: transparent none repeat scroll 0 0;
+  height: 30px;
+  line-height: 30px;
+  padding-left: 0;
+  width: 7%; }
+.repeat1 .subblock {
+  display: inline-block;
+  float: left;
+  width: 97%;
+  border: 1px solid #aaa; }
+  .repeat1 .subblock .td_cell.table_btn > a {
+    background: #ddd none repeat scroll 0 0;
+    border: 1px solid #ccc;
+    float: left;
+    text-align: center;
+    width: 25%;
+    color: black; }
+    .repeat1 .subblock .td_cell.table_btn > a:hover {
+      background: #C2C2C2; }
+  .repeat1 .subblock .td_row .tr_row .td_cell.attribute_list {
+    width: 100%; }
+    .repeat1 .subblock .td_row .tr_row .td_cell.attribute_list table {
+      background: white; }
+  .repeat1 .subblock .thead {
+    display: block;
+    float: left;
+    width: 100%;
+    background: transparent; }
+  .repeat1 .subblock > .thead.td_row {
+    background: white;
+    box-shadow: none; }
+  .repeat1 .subblock > .td_row {
+    box-shadow: inset 3px 7px 10px 1px black;
+    background: rgba(204, 204, 204, 0.38) none repeat scroll 0 0;
+    display: block;
+    float: left;
+    width: 100%; }
+  .repeat1 .subblock .thead2 {
+    background: rgba(132, 132, 132, 0.68) none repeat scroll 0 0;
+    color: white;
+    display: block;
+    float: left;
+    width: 100%; }
+    .repeat1 .subblock .thead2 .th {
+      border-right: 1px solid #ddd;
+      float: left;
+      height: 30px;
+      line-height: 30px;
+      padding-left: 7px;
+      width: 11%; }
+      .repeat1 .subblock .thead2 .th:last-child {
+        border-right: 0; }
+      .repeat1 .subblock .thead2 .th button {
+        color: white; }
+  .repeat1 .subblock .thead3 .th {
+    float: left;
+    width: 14%;
+    height: 30px;
+    line-height: 30px;
+    background: rgba(186, 186, 186, 0.52);
+    padding-left: 7px;
+    border-top: 2px solid rgba(0, 0, 0, 0.55); }
+    .repeat1 .subblock .thead3 .th button {
+      color: black; }
+    .repeat1 .subblock .thead3 .th:first-child {
+      border-left: 2px solid rgba(0, 0, 0, 0.55); }
+  .repeat1 .subblock .repeat2 .td_cell.colcell {
+    width: 3%;
+    height: 30px;
+    line-height: 30px; }
+  .repeat1 .subblock .repeat2 .subblock .tr_row > .td_cell {
+    font-weight: bold;
+    height: 30px;
+    line-height: 30px;
+    padding-left: 7px; }
+    .repeat1 .subblock .repeat2 .subblock .tr_row > .td_cell.attribute_list {
+      height: auto;
+      color: black;
+      font-weight: normal; }
+  .repeat1 .subblock .repeat2 .subblock .tr_row .td_cell {
+    width: 11.4%; }
+    .repeat1 .subblock .repeat2 .subblock .tr_row .td_cell.table_btn {
+      width: 8%;
+      padding-left: 0; }
+  .repeat1 .subblock .repeat2 .subblock .tr_row .td_cell.attribute_list {
+    width: 100%; }
+  .repeat1 .subblock .repeat2 .subblock .repeat3 .td_cell.colcell {
+    width: 3%;
+    border-left: 2px solid rgba(0, 0, 0, 0.55);
+    height: 32px; }
+  .repeat1 .subblock .repeat2 .subblock .repeat3 .subblock {
+    background: white; }
+    .repeat1 .subblock .repeat2 .subblock .repeat3 .subblock .td_cell.table_btn > a {
+      width: 16%; }
+    .repeat1 .subblock .repeat2 .subblock .repeat3 .subblock .tr_row .td_cell {
+      background: white;
+      color: black;
+      width: 14.5%;
+      height: 30px; }
+      .repeat1 .subblock .repeat2 .subblock .repeat3 .subblock .tr_row .td_cell.attribute_list {
+        width: 100%;
+        height: auto; }
+      .repeat1 .subblock .repeat2 .subblock .repeat3 .subblock .tr_row .td_cell.table_btn {
+        width: 11.3%; }
+
+.main_content.studies {
+  float: left; }
+
+.btn.disabled, .btn[disabled], fieldset[disabled] .btn {
+  box-shadow: none;
+  cursor: not-allowed;
+  opacity: 0.34; }
 
 /*# sourceMappingURL=style.css.map */
