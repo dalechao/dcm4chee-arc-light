@@ -63,6 +63,8 @@ public class ArchiveAttributeCoercion {
     private String xsltStylesheetURI;
     private boolean noKeywords;
     private String leadingCFindSCP;
+    private MergeMWLMatchingKey mergeMWLMatchingKey;
+    private String mergeMWLTemplateURI;
     private Attributes.UpdatePolicy attributeUpdatePolicy;
 
     public ArchiveAttributeCoercion() {
@@ -152,6 +154,22 @@ public class ArchiveAttributeCoercion {
         this.leadingCFindSCP = leadingCFindSCP;
     }
 
+    public MergeMWLMatchingKey getMergeMWLMatchingKey() {
+        return mergeMWLMatchingKey;
+    }
+
+    public void setMergeMWLMatchingKey(MergeMWLMatchingKey mergeMWLMatchingKey) {
+        this.mergeMWLMatchingKey = mergeMWLMatchingKey;
+    }
+
+    public String getMergeMWLTemplateURI() {
+        return mergeMWLTemplateURI;
+    }
+
+    public void setMergeMWLTemplateURI(String mergeMWLTemplateURI) {
+        this.mergeMWLTemplateURI = mergeMWLTemplateURI;
+    }
+
     public Attributes.UpdatePolicy getAttributeUpdatePolicy() {
         return attributeUpdatePolicy;
     }
@@ -194,6 +212,8 @@ public class ArchiveAttributeCoercion {
                 + ", xslturi=" + xsltStylesheetURI
                 + ", noKeywords=" + noKeywords
                 + ", leadingCFindSCP=" + leadingCFindSCP
+                + ", mergeMWLMatchingKey=" + mergeMWLMatchingKey
+                + ", mergeMWLTemplateURI=" + mergeMWLTemplateURI
                 + ", attributeUpdatePolicy=" + attributeUpdatePolicy
                 + "]";
     }

@@ -44,11 +44,11 @@ import org.dcm4che3.data.*;
 import org.dcm4che3.net.ApplicationEntity;
 import org.dcm4che3.net.Device;
 import org.dcm4chee.arc.Scheduler;
-import org.dcm4chee.arc.conf.ArchiveAEExtension;
-import org.dcm4chee.arc.conf.ArchiveDeviceExtension;
-import org.dcm4chee.arc.conf.Duration;
+import org.dcm4chee.arc.conf.*;
 import org.dcm4chee.arc.entity.IanTask;
 import org.dcm4chee.arc.entity.MPPS;
+import org.dcm4chee.arc.entity.QueueMessage;
+import org.dcm4chee.arc.exporter.ExportContext;
 import org.dcm4chee.arc.mpps.MPPSContext;
 import org.dcm4chee.arc.query.QueryService;
 import org.dcm4chee.arc.store.StoreContext;
@@ -63,6 +63,7 @@ import java.util.List;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
+ * @author Vrinda Nayak <vrinda.nayak@j4care.com>
  * @since Apr 2016
  */
 @ApplicationScoped
@@ -77,6 +78,10 @@ public class IANScheduler extends Scheduler {
 
     @Inject
     private QueryService queryService;
+
+    protected IANScheduler() {
+        super(Mode.scheduleWithFixedDelay);
+    }
 
     @Override
     protected Logger log() {
@@ -119,10 +124,10 @@ public class IANScheduler extends Scheduler {
                     ApplicationEntity ae = device.getApplicationEntity(ianTask.getCallingAET(), true);
                     if (ianTask.getMpps() == null) {
                         LOG.info("Schedule {}", ianTask);
-                        ejb.scheduleIANTask(ianTask, createIANForStudy(ae, ianTask.getStudyInstanceUID()));
+                        ejb.scheduleIANTask(ianTask, createIAN(ae, ianTask.getStudyInstanceUID(), null, null));
                     } else {
                         if (ae.getAEExtension(ArchiveAEExtension.class).ianOnTimeout()
-                                && (ian = createIANForStudy(ae, ianTask.getMpps().getStudyInstanceUID())) != null) {
+                                && (ian = createIAN(ae, ianTask.getMpps().getStudyInstanceUID(), null, null)) != null) {
                             LOG.warn("Timeout for {} exceeded - schedule IAN for available instances", ianTask);
                             ejb.scheduleIANTask(ianTask, ian);
                         } else {
@@ -154,7 +159,7 @@ public class IANScheduler extends Scheduler {
     }
 
     public void onStore(@Observes StoreContext ctx) {
-        if (ctx.getLocation() == null)
+        if (ctx.getLocations().isEmpty() || ctx.getException() != null)
             return;
 
         StoreSession session = ctx.getStoreSession();
@@ -179,23 +184,37 @@ public class IANScheduler extends Scheduler {
         }
     }
 
+    public void onExport(@Observes ExportContext ctx) {
+        ExporterDescriptor descriptor = ctx.getExporter().getExporterDescriptor();
+        if (descriptor.getIanDestinations().length != 0)
+            if (ctx.isOnlyIAN()
+                    || !ctx.isOnlyStgCmt() && ctx.getOutcome().getStatus() == QueueMessage.Status.COMPLETED)
+                sendIAN(ctx, descriptor);
+        return;
+    }
+
+    private void sendIAN(ExportContext ctx, ExporterDescriptor descriptor) {
+        ApplicationEntity ae = device.getApplicationEntity(ctx.getAETitle(), true);
+        Attributes attrs = createIAN(ae, ctx.getStudyInstanceUID(), null,
+                descriptor.getInstanceAvailability(), descriptor.getRetrieveAETitles());
+        for (String remoteAET : descriptor.getIanDestinations())
+            ejb.scheduleMessage(ctx.getAETitle(), attrs, remoteAET);
+    }
+
     private Attributes createIANForMPPS(ApplicationEntity ae, MPPS mpps) {
         Attributes mppsAttrs = mpps.getAttributes();
         String studyInstanceUID = mpps.getStudyInstanceUID();
         Sequence perfSeriesSeq = mppsAttrs.getSequence(Tag.PerformedSeriesSequence);
         Attributes ian = new Attributes(3);
-        ian.newSequence(Tag.ReferencedPerformedProcedureStepSequence, 1).add(refMPPS(mpps));
         Sequence refSeriesSeq = ian.newSequence(Tag.ReferencedSeriesSequence, perfSeriesSeq.size());
         ian.setString(Tag.StudyInstanceUID, VR.UI, studyInstanceUID);
         for (Attributes perfSeries : perfSeriesSeq) {
             String seriesInstanceUID = perfSeries.getString(Tag.SeriesInstanceUID);
-            Attributes result = queryService.getStudyAttributesWithSOPInstanceRefs(
-                    studyInstanceUID, seriesInstanceUID, null, ae, true);
-            if (result == null)
+            Attributes ianForSeries = queryService.createIAN(ae, studyInstanceUID, seriesInstanceUID, null);
+            if (ianForSeries == null)
                 return null;
 
-            Attributes refStudy = result.getNestedDataset(Tag.CurrentRequestedProcedureEvidenceSequence);
-            Attributes refSeries = refStudy.getSequence(Tag.ReferencedSeriesSequence).remove(0);
+            Attributes refSeries = ianForSeries.getSequence(Tag.ReferencedSeriesSequence).remove(0);
             Sequence available = refSeries.getSequence(Tag.ReferencedSOPSequence);
             if (!allAvailable(perfSeries.getSequence(Tag.ReferencedImageSequence), available) ||
                 !allAvailable(perfSeries.getSequence(Tag.ReferencedNonImageCompositeSOPInstanceSequence), available))
@@ -203,6 +222,7 @@ public class IANScheduler extends Scheduler {
 
             refSeriesSeq.add(refSeries);
         }
+        ian.newSequence(Tag.ReferencedPerformedProcedureStepSequence, 1).add(refMPPS(mpps));
         return ian;
     }
 
@@ -232,13 +252,13 @@ public class IANScheduler extends Scheduler {
         return false;
     }
 
-    private Attributes createIANForStudy(ApplicationEntity ae, String studyInstanceUID) {
-        Attributes result = queryService.getStudyAttributesWithSOPInstanceRefs(studyInstanceUID, null, null, ae, true);
-        if (result == null)
-            return null;
-        Attributes refStudy = result.getNestedDataset(Tag.CurrentRequestedProcedureEvidenceSequence);
-        refStudy.setNull(Tag.ReferencedPerformedProcedureStepSequence, VR.SQ);
-        return refStudy;
+    private Attributes createIAN(ApplicationEntity ae, String studyInstanceUID, String seriesInstanceUID,
+                                 Availability availability, String... retrieveAETs) {
+        Attributes ian = queryService.createIAN(ae, studyInstanceUID, seriesInstanceUID, availability, retrieveAETs);
+        if (ian != null)
+            ian.setNull(Tag.ReferencedPerformedProcedureStepSequence, VR.SQ);
+
+        return ian;
     }
 
 }

@@ -44,64 +44,62 @@ import org.dcm4che3.data.Attributes;
 import org.dcm4che3.data.Tag;
 import org.dcm4che3.imageio.codec.Transcoder;
 import org.dcm4che3.net.*;
-import org.dcm4che3.util.SafeClose;
 import org.dcm4chee.arc.entity.*;
 import org.dcm4chee.arc.retrieve.InstanceLocations;
 import org.dcm4chee.arc.retrieve.RetrieveContext;
 import org.dcm4chee.arc.retrieve.RetrieveService;
 import org.dcm4chee.arc.store.StoreContext;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import javax.enterprise.event.Event;
 import java.io.IOException;
+import java.util.Collection;
 import java.util.Set;
 import java.util.concurrent.LinkedBlockingQueue;
 
-import static org.dcm4che3.net.Dimse.LOG;
-
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
+ * @author Vrinda Nayak <vrinda.nayak@j4care.com>
  * @since May 2016
  */
 class CStoreForwardTask implements Runnable {
+
+    static final Logger LOG = LoggerFactory.getLogger(CStoreForwardTask.class);
+
     private final RetrieveContext ctx;
     private final Association rqas;
     private final Association storeas;
-    private final Event<RetrieveContext> retrieveEnd;
     private final LinkedBlockingQueue<WrappedStoreContext> queue = new LinkedBlockingQueue();
 
-    public CStoreForwardTask(RetrieveContext ctx, Association storeas, Event<RetrieveContext> retrieveEnd) {
+    public CStoreForwardTask(RetrieveContext ctx, Association storeas) {
         this.ctx = ctx;
         this.rqas = ctx.getRequestAssociation();
         this.storeas = storeas;
-        this.retrieveEnd = retrieveEnd;
     }
 
     public void onStore(StoreContext storeContext) {
         if (storeas != null)
             queue.offer(new WrappedStoreContext(storeContext));
-        else if (storeContext != null)
+        else if (storeContext != null) {
             ctx.addFailedSOPInstanceUID(storeContext.getSopInstanceUID());
+            ctx.incrementFailed();
+        }
     }
 
     @Override
     public void run() {
-        RetrieveContext event = ctx.getRetrieveService().cloneRetrieveContext(ctx);
-        event.setStoreAssociation(storeas);
-        ctx.incrementPendingCStoreForward();
         try {
             StoreContext storeCtx;
             while ((storeCtx = queue.take().storeContext) != null) {
-                store(storeCtx, event);
+                store(storeCtx);
             }
             storeas.waitForOutstandingRSP();
         } catch (InterruptedException e) {
             LOG.warn("{}: failed to wait for outstanding RSP on association to {}", rqas, storeas.getRemoteAET(), e);
         } finally {
-            ctx.decrementPendingCStoreForward();
             releaseStoreAssociation();
-            SafeClose.close(event);
+            ctx.decrementPendingCStoreForward();
         }
-        retrieveEnd.fire(event);
     }
 
     private void releaseStoreAssociation() {
@@ -112,9 +110,9 @@ class CStoreForwardTask implements Runnable {
         }
     }
 
-    private void store(StoreContext storeCtx, RetrieveContext event) {
+    private void store(StoreContext storeCtx) {
         InstanceLocations inst = createInstanceLocations(storeCtx);
-        event.getMatches().add(inst);
+        ctx.addCStoreForward(inst);
         String cuid = inst.getSopClassUID();
         String iuid = inst.getSopInstanceUID();
         Set<String> tsuids = storeas.getTransferSyntaxesFor(cuid);
@@ -127,21 +125,20 @@ class CStoreForwardTask implements Runnable {
                 String tsuid = transcoder.getDestinationTransferSyntax();
                 DataWriter data = new TranscoderDataWriter(transcoder,
                         service.getAttributesCoercion(ctx, inst));
-                DimseRSPHandler rspHandler = new CStoreRSPHandler(inst, event);
+                DimseRSPHandler rspHandler = new CStoreRSPHandler(inst);
                 storeas.cstore(cuid, iuid, ctx.getPriority(),
                             ctx.getMoveOriginatorAETitle(), ctx.getMoveOriginatorMessageID(),
                             data, tsuid, rspHandler);
             }
         } catch (Exception e) {
-            event.addFailedSOPInstanceUID(iuid);
+            ctx.incrementFailed();
             ctx.addFailedSOPInstanceUID(iuid);
             LOG.info("{}: failed to send {} to {}:", rqas, inst, ctx.getDestinationAETitle(), e);
         }
     }
 
     private InstanceLocations createInstanceLocations(StoreContext storeCtx) {
-        Location location = storeCtx.getLocation();
-        Instance inst = location != null ? location.getInstance() : storeCtx.getPreviousInstance();
+        Instance inst = storeCtx.getStoredInstance();
         Series series = inst.getSeries();
         Study study = series.getStudy();
         Patient patient = study.getPatient();
@@ -154,13 +151,14 @@ class CStoreForwardTask implements Runnable {
         instAttrs.addAll(studyAttrs);
         instAttrs.addAll(patAttrs);
         RetrieveService service = ctx.getRetrieveService();
-        InstanceLocations instanceLocations = service.newInstanceLocations(
-                storeCtx.getSopClassUID(), storeCtx.getSopInstanceUID(), instAttrs);
-        if (location != null)
-            instanceLocations.getLocations().add(location);
-        else
-            instanceLocations.getLocations().addAll(service.findLocations(inst));
+        InstanceLocations instanceLocations = service.newInstanceLocations(instAttrs);
+        instanceLocations.getLocations().addAll(locations(storeCtx));
         return instanceLocations;
+    }
+
+    private Collection<Location> locations(StoreContext storeCtx) {
+        Collection<Location> locations = storeCtx.getLocations();
+        return locations.isEmpty() ? storeCtx.getStoredInstance().getLocations() : locations;
     }
 
     private static class WrappedStoreContext {
@@ -174,24 +172,22 @@ class CStoreForwardTask implements Runnable {
     private final class CStoreRSPHandler extends DimseRSPHandler {
 
         private final InstanceLocations inst;
-        private final RetrieveContext event;
 
-        public CStoreRSPHandler(InstanceLocations inst, RetrieveContext event) {
+        public CStoreRSPHandler(InstanceLocations inst) {
             super(storeas.nextMessageID());
             this.inst = inst;
-            this.event = event;
         }
 
         @Override
         public void onDimseRSP(Association as, Attributes cmd, Attributes data) {
             super.onDimseRSP(as, cmd, data);
             int storeStatus = cmd.getInt(Tag.Status, -1);
-            if (storeStatus == Status.Success)
-                event.incrementCompleted();
-            else if ((storeStatus & 0xB000) == 0xB000)
-                event.incrementWarning();
-            else {
-                event.addFailedSOPInstanceUID(inst.getSopInstanceUID());
+            if (storeStatus == Status.Success) {
+                ctx.incrementCompleted();
+            } else if ((storeStatus & 0xB000) == 0xB000) {
+                ctx.incrementWarning();
+            } else {
+                ctx.incrementFailed();
                 ctx.addFailedSOPInstanceUID(inst.getSopInstanceUID());
             }
         }

@@ -45,7 +45,7 @@
   <parent>
     <artifactId>dcm4chee-arc-parent</artifactId>
     <groupId>org.dcm4che.dcm4chee-arc</groupId>
-    <version>5.3.1</version>
+    <version>5.9.0</version>
   </parent>
   <modelVersion>4.0.0</modelVersion>
 
@@ -82,6 +82,12 @@
       <groupId>org.dcm4che</groupId>
       <artifactId>dcm4che-jboss-modules</artifactId>
       <version>${dcm4che.version}</version>
+      <type>zip</type>
+    </dependency>
+    <dependency>
+      <groupId>org.dcm4che</groupId>
+      <artifactId>ecs-object-client-jboss-modules</artifactId>
+      <version>${ecs-object-client.version}</version>
       <type>zip</type>
     </dependency>
     <dependency>

@@ -41,17 +41,27 @@
 package org.dcm4chee.arc.delete;
 
 import org.dcm4che3.data.Code;
-import org.dcm4chee.arc.entity.Location;
+import org.dcm4che3.net.ApplicationEntity;
+import org.dcm4chee.arc.patient.PatientMgtContext;
 
+import javax.servlet.http.HttpServletRequest;
 import java.util.Date;
-import java.util.List;
+
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
+ * @author Vrinda Nayak <vrinda.nayak@j4care.com>
  * @since Nov 2015
  */
 public interface DeletionService {
     int deleteRejectedInstancesBefore(Code rjCode, Date before, int fetchSize);
 
     int deleteRejectionNotesBefore(Code rjCode, Date before, int fetchSize);
+
+    StudyDeleteContext createStudyDeleteContext(Long pk, HttpServletRequest httpRequest);
+
+    void deleteStudy(String studyUID, HttpServletRequest request, ApplicationEntity ae)
+            throws StudyNotFoundException, StudyNotEmptyException;
+
+    void deletePatient(PatientMgtContext ctx);
 }

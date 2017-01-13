@@ -49,15 +49,12 @@ import org.dcm4chee.arc.storage.WriteContext;
 import org.jclouds.ContextBuilder;
 import org.jclouds.blobstore.BlobStore;
 import org.jclouds.blobstore.BlobStoreContext;
-import org.jclouds.blobstore.ContainerNotFoundException;
 import org.jclouds.blobstore.domain.Blob;
 import org.jclouds.io.Payload;
 import org.jclouds.io.payloads.InputStreamPayload;
 import org.jclouds.logging.slf4j.config.SLF4JLoggingModule;
 
 import java.io.*;
-import java.net.URI;
-import java.nio.file.Paths;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Properties;
@@ -87,8 +84,8 @@ public class CloudStorage extends AbstractStorage {
     private final AttributesFormat pathFormat;
     private final String container;
     private final BlobStoreContext context;
-
     private final Uploader uploader;
+    private int count;
 
     @Override
     public WriteContext createWriteContext() {
@@ -100,7 +97,7 @@ public class CloudStorage extends AbstractStorage {
         this.device = device;
         pathFormat = new AttributesFormat(descriptor.getProperty("pathFormat", DEFAULT_PATH_FORMAT));
         container = descriptor.getProperty("container", DEFAULT_CONTAINER);
-
+        if (Boolean.parseBoolean(descriptor.getProperty("containerExists", null))) count++;
         String api = descriptor.getStorageURI().getSchemeSpecificPart();
         String endpoint = null;
         int endApi = api.indexOf(':');
@@ -108,7 +105,7 @@ public class CloudStorage extends AbstractStorage {
             endpoint = api.substring(endApi + 1);
             api = api.substring(0, endApi);
         }
-        this.uploader = api.equals("aws-s3") ? new AWS_S3Uploader() : DEFAULT_UPLOADER;
+        this.uploader = api.endsWith("s3") ? new S3Uploader() : DEFAULT_UPLOADER;
         ContextBuilder ctxBuilder = ContextBuilder.newBuilder(api);
         String identity = descriptor.getProperty("identity", null);
         if (identity != null)
@@ -163,12 +160,12 @@ public class CloudStorage extends AbstractStorage {
     private void upload(WriteContext ctx, InputStream in) throws IOException {
         BlobStore blobStore = context.getBlobStore();
         String storagePath = pathFormat.format(ctx.getAttributes());
-        try {
+        if (count++ == 0 && !blobStore.containerExists(container))
+            blobStore.createContainerInLocation(null, container);
+        else {
             while (blobStore.blobExists(container, storagePath))
                 storagePath = storagePath.substring(0, storagePath.lastIndexOf('/') + 1)
                         .concat(String.format("%08X", ThreadLocalRandom.current().nextInt()));
-        } catch (ContainerNotFoundException e) {
-            blobStore.createContainerInLocation(null, container);
         }
         uploader.upload(context, in, blobStore, container, storagePath);
         ctx.setStoragePath(storagePath);

@@ -52,6 +52,7 @@
             <module name="org.dcm4che.conf.ldap-hl7" export="TRUE"/>
             <module name="org.dcm4che.conf.ldap-imageio" export="TRUE"/>
             <module name="org.dcm4che.core" export="TRUE"/>
+            <module name="org.dcm4che.dict-arc" export="TRUE"/>
             <module name="org.dcm4che.json" export="TRUE"/>
             <module name="org.dcm4che.mime" export="TRUE"/>
             <module name="org.dcm4che.ws-rs" export="TRUE"/>
@@ -70,6 +71,8 @@
             <!-- keycloak modules -->
             <module name="org.keycloak.keycloak-core" export="TRUE" services="export"/>
             <module name="org.keycloak.keycloak-adapter-core" export="TRUE" services="export"/>
+            <!-- emc-ecs modules -->
+            <module name="com.emc.ecs" export="TRUE"/>
         </dependencies>
     </deployment>
 </jboss-deployment-structure>

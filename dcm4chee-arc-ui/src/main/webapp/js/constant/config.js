@@ -89,7 +89,15 @@ myApp.constant("$select",
         "optionRef" : ["dicomNetworkAE"],
         "optionValue" : "dicomAETitle",
         "type": "array",
-        "parentOf" : ["dicomTransferCapability","dcmArchiveNetworkAE","dcmNetworkAE"],
+        "parentOf" : [
+          "dicomTransferCapability",
+          "dcmArchiveNetworkAE",
+          "dcmNetworkAE",
+          // "dcmExportRule",
+          "dcmArchiveCompressionRule",
+          "dcmArchiveAttributeCoercion",
+          "dcmStudyRetentionPolicy"
+        ],
         "required":{
           "dicomAETitle": "AE Title",
           "dicomNetworkConnectionReference": "Network Connection Reference",
@@ -116,8 +124,38 @@ myApp.constant("$select",
         "title" : "Archive Network AE",
         "optionRef" : ["dicomNetworkAE","dcmArchiveNetworkAE"],
         "optionValue" : "dcmStorageID",
-        "type": "object"
+        "type": "object",
+        "parentOf" : [
+          "dcmExportRule",
+          "dcmArchiveCompressionRule",
+          "dcmArchiveAttributeCoercion",
+          "dcmStudyRetentionPolicy"
+        ],
       },
+      // "dcmExportRule":{
+      //   "title" : "Export Rule",
+      //   "optionRef" : ["dicomNetworkAE","dcmArchiveNetworkAE","dcmExportRule"],
+      //   "optionValue" : "cn",
+      //   "type": "array"
+      // },
+      // "dcmArchiveCompressionRule":{
+      //   "title" : "Archive Compression rule",
+      //   "optionRef" : ["dicomNetworkAE","dcmArchiveNetworkAE","dcmArchiveCompressionRule"],
+      //   "optionValue" : "cn",
+      //   "type": "array"
+      // },
+      // "dcmArchiveAttributeCoercion":{
+      //   "title" : "Archive Attribute Coercion",
+      //   "optionRef" : ["dicomNetworkAE","dcmArchiveNetworkAE","dcmArchiveAttributeCoercion"],
+      //   "optionValue" : "cn",
+      //   "type": "array"
+      // },
+      // "dcmStudyRetentionPolicy":{
+      //   "title" : "Study Retention Policy",
+      //   "optionRef" : ["dicomNetworkAE","dcmArchiveNetworkAE","dcmStudyRetentionPolicy"],
+      //   "optionValue" : "cn",
+      //   "type": "array"
+      // },
       "dcmNetworkAE":{
         "title" : "dcm4che Network AE Attributes",
         "optionRef" : ["dicomNetworkAE","dcmNetworkAE"],
@@ -143,6 +181,7 @@ myApp.constant("$select",
         "title" : "Archive HL7 Application",
         "optionRef" : ["hl7Application","dcmArchiveHL7Application"],
         "optionValue": "hl7ApplicationName",
+        "parentOf" : ["hl7ForwardRule"],
         "type": "object"
       
       },
@@ -213,7 +252,10 @@ myApp.constant("$select",
           "dcmExportRule",
           "dcmArchiveCompressionRule",
           "dcmArchiveAttributeCoercion",
-          "dcmRejectionNote"
+          "dcmRejectionNote",
+          "dcmStudyRetentionPolicy",
+          "dcmIDGenerator",
+          "hl7ForwardRule"
         ]
       
       },
@@ -302,8 +344,7 @@ myApp.constant("$select",
         "required":{
           "cn": "Name",
           "dcmDIMSE": "DIMSE",
-          "dicomTransferRole": "DICOM Transfer Role",
-          "dcmURI": "dcmURI"
+          "dicomTransferRole": "DICOM Transfer Role"
         }
       },
       "dcmRejectionNote":{
@@ -314,6 +355,39 @@ myApp.constant("$select",
         "required":{
           "dcmRejectionNoteLabel": "Rejection Note Label",
           "dcmRejectionNoteCode": "Rejection Note Code"
+        }
+      
+      },
+      "dcmStudyRetentionPolicy":{
+        "title" : "Study Retention Policy",
+        "optionRef" : ["dcmArchiveDevice", "dcmStudyRetentionPolicy"],
+        "optionValue": "cn",
+        "type": "array",
+        "required":{
+          "cn": "Name",
+          "dcmRetentionPeriod": "Study Retention Period"
+        }
+      
+      },
+      "dcmIDGenerator":{
+        "title" : "ID Generator",
+        "optionRef" : ["dcmArchiveDevice", "dcmIDGenerator"],
+        "optionValue": "dcmIDGeneratorName",
+        "type": "array",
+        "required":{
+          "dcmIDGeneratorName": "ID Generator Name",
+          "dcmIDGeneratorFormat": "ID Generator Format"
+        }
+      
+      },
+      "hl7ForwardRule":{
+        "title" : "HL7 Forward Rule",
+        "optionRef" : ["dcmArchiveDevice", "hl7ForwardRule"],
+        "optionValue": "cn",
+        "type": "array",
+        "required":{
+          "cn": "Name",
+          "hl7FwdApplicationName": "HL7 Forward Application Name"
         }
       
       }

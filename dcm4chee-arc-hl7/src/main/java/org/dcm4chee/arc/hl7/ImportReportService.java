@@ -40,7 +40,6 @@
 
 package org.dcm4chee.arc.hl7;
 
-import org.dcm4che3.conf.api.ConfigurationAlreadyExistsException;
 import org.dcm4che3.conf.api.ConfigurationException;
 import org.dcm4che3.data.Attributes;
 import org.dcm4che3.data.Tag;
@@ -48,24 +47,25 @@ import org.dcm4che3.data.UID;
 import org.dcm4che3.data.VR;
 import org.dcm4che3.hl7.HL7Exception;
 import org.dcm4che3.hl7.HL7Segment;
-import org.dcm4che3.io.SAXTransformer.SetupTransformer;
-import org.dcm4che3.io.TemplatesCache;
 import org.dcm4che3.net.ApplicationEntity;
 import org.dcm4che3.net.Connection;
 import org.dcm4che3.net.hl7.HL7Application;
+import org.dcm4che3.net.hl7.UnparsedHL7Message;
 import org.dcm4che3.net.hl7.service.DefaultHL7Service;
 import org.dcm4che3.net.hl7.service.HL7Service;
-import org.dcm4che3.util.StringUtils;
 import org.dcm4che3.util.UIDUtils;
 import org.dcm4chee.arc.conf.ArchiveHL7ApplicationExtension;
+import org.dcm4chee.arc.patient.PatientService;
 import org.dcm4chee.arc.store.StoreContext;
 import org.dcm4chee.arc.store.StoreService;
 import org.dcm4chee.arc.store.StoreSession;
+import org.xml.sax.SAXException;
 
 import javax.enterprise.context.ApplicationScoped;
 import javax.enterprise.inject.Typed;
 import javax.inject.Inject;
-import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerConfigurationException;
+import java.io.IOException;
 import java.net.Socket;
 
 /**
@@ -75,7 +75,10 @@ import java.net.Socket;
  */
 @ApplicationScoped
 @Typed(HL7Service.class)
-class ImportReportService extends DefaultHL7Service {
+class ImportReportService extends AbstractHL7Service {
+
+    @Inject
+    private PatientService patientService;
 
     @Inject
     private StoreService storeService;
@@ -85,49 +88,46 @@ class ImportReportService extends DefaultHL7Service {
     }
 
     @Override
-    public byte[] onMessage(HL7Application hl7App, Connection conn, Socket s, HL7Segment msh,
-                            byte[] msg, int off, int len, int mshlen) throws HL7Exception {
-        try {
-            ArchiveHL7ApplicationExtension arcHL7App =
-                    hl7App.getHL7ApplicationExtension(ArchiveHL7ApplicationExtension.class);
-            String aet = arcHL7App.getAETitle();
-            if (aet == null) {
-                throw new ConfigurationException("No AE Title associated with HL7 Application: "
-                        + hl7App.getApplicationName());
-            }
-            ApplicationEntity ae = hl7App.getDevice().getApplicationEntity(aet);
-            if (ae == null) {
-                throw new ConfigurationException("No local AE with AE Title " + aet
-                        + " associated with HL7 Application: " + hl7App.getApplicationName());
-            }
-            String hl7cs = msh.getField(17, hl7App.getHL7DefaultCharacterSet());
-            Attributes attrs = SAXTransformer.transform(msg, off, len, hl7cs,
-                    TemplatesCache.getDefault().get(
-                            StringUtils.replaceSystemProperties(arcHL7App.importReportTemplateURI())),
-                    new SetupTransformer() {
-                        @Override
-                        public void setup(Transformer transformer) {}
-                    });
-            if (attrs.getString(Tag.StudyInstanceUID) == null)
-                attrs.setString(Tag.StudyInstanceUID, VR.valueOf("UI"), UIDUtils.createUID());
-            if (attrs.getString(Tag.SOPInstanceUID) == null)
-                attrs.setString(Tag.SOPInstanceUID, VR.valueOf("UI"), UIDUtils.createUID());
-            if (attrs.getString(Tag.SeriesInstanceUID) == null)
-                attrs.setString(Tag.SeriesInstanceUID, VR.valueOf("UI"),
-                        UIDUtils.createNameBasedUID(attrs.getString(Tag.SOPInstanceUID).getBytes()));
-            try (StoreSession session = storeService.newStoreSession(s, msh, ae)) {
-                StoreContext ctx = storeService.newStoreContext(session);
-                ctx.setSopClassUID(attrs.getString(Tag.SOPClassUID));
-                ctx.setSopInstanceUID(attrs.getString(Tag.SOPInstanceUID));
-                ctx.setReceiveTransferSyntax(UID.ExplicitVRLittleEndian);
-                storeService.store(ctx, attrs);
-            }
-            return super.onMessage(hl7App, conn, s, msh, msg, off, len, mshlen);
-        } catch (HL7Exception e) {
-            throw e;
-        } catch (Exception e) {
-            throw new HL7Exception(HL7Exception.AE, e);
+    protected void process(HL7Application hl7App, Socket s, UnparsedHL7Message msg) throws Exception {
+        PatientUpdateService.updatePatient(hl7App, s, msg, patientService);
+        importReport(hl7App, s, msg);
+    }
+
+    private void importReport(HL7Application hl7App, Socket s, UnparsedHL7Message msg)
+            throws ConfigurationException, IOException, SAXException, TransformerConfigurationException {
+        ArchiveHL7ApplicationExtension arcHL7App =
+                hl7App.getHL7ApplicationExtension(ArchiveHL7ApplicationExtension.class);
+        String aet = arcHL7App.getAETitle();
+        if (aet == null) {
+            throw new ConfigurationException("No AE Title associated with HL7 Application: "
+                    + hl7App.getApplicationName());
+        }
+        ApplicationEntity ae = hl7App.getDevice().getApplicationEntity(aet);
+        if (ae == null) {
+            throw new ConfigurationException("No local AE with AE Title " + aet
+                    + " associated with HL7 Application: " + hl7App.getApplicationName());
+        }
+        HL7Segment msh = msg.msh();
+        String hl7cs = msh.getField(17, hl7App.getHL7DefaultCharacterSet());
+        Attributes attrs = SAXTransformer.transform(
+                msg.data(), hl7cs, arcHL7App.importReportTemplateURI(), null);
+        adjust(attrs);
+        try (StoreSession session = storeService.newStoreSession(s, msh, ae)) {
+            StoreContext ctx = storeService.newStoreContext(session);
+            ctx.setSopClassUID(attrs.getString(Tag.SOPClassUID));
+            ctx.setSopInstanceUID(attrs.getString(Tag.SOPInstanceUID));
+            ctx.setReceiveTransferSyntax(UID.ExplicitVRLittleEndian);
+            storeService.store(ctx, attrs);
         }
     }
 
+    private void adjust(Attributes attrs) {
+        if (attrs.getString(Tag.StudyInstanceUID) == null)
+            attrs.setString(Tag.StudyInstanceUID, VR.valueOf("UI"), UIDUtils.createUID());
+        if (attrs.getString(Tag.SOPInstanceUID) == null)
+            attrs.setString(Tag.SOPInstanceUID, VR.valueOf("UI"), UIDUtils.createUID());
+        if (attrs.getString(Tag.SeriesInstanceUID) == null)
+            attrs.setString(Tag.SeriesInstanceUID, VR.valueOf("UI"),
+                    UIDUtils.createNameBasedUID(attrs.getString(Tag.SOPInstanceUID).getBytes()));
+    }
 }

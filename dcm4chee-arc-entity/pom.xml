@@ -45,7 +45,7 @@
   <parent>
     <artifactId>dcm4chee-arc-parent</artifactId>
     <groupId>org.dcm4che.dcm4chee-arc</groupId>
-    <version>5.3.1</version>
+    <version>5.9.0</version>
   </parent>
   <modelVersion>4.0.0</modelVersion>
 
@@ -105,6 +105,7 @@
               <classifier>${db}-sql</classifier>
               <includes>
                 <include>sql/create-${db}.sql</include>
+                <include>sql/update-*-${db}.sql</include>
                 <include>sql/drop-${db}.sql</include>
                 <include>sql/create-index.sql</include>
                 <include>sql/create-case-insensitive-index.sql</include>
@@ -148,8 +149,8 @@
               <databaseMajorVersion>${databaseMajorVersion}</databaseMajorVersion>
               <databaseMinorVersion>${databaseMinorVersion}</databaseMinorVersion>
               <scriptAction>drop-and-create</scriptAction>
-              <outputDirectory>${build.outputDirectory}/sql</outputDirectory>
-              <createOutputFileName>create-${db}.sql</createOutputFileName>
+              <outputDirectory>${project.build.outputDirectory}/sql</outputDirectory>
+              <createOutputFileName>${createOutputFileName}</createOutputFileName>
               <dropOutputFileName>drop-${db}.sql</dropOutputFileName>
             </configuration>
           </execution>

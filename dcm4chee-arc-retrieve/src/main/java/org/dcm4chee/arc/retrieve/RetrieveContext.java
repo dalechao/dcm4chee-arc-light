@@ -45,16 +45,23 @@ import org.dcm4che3.net.ApplicationEntity;
 import org.dcm4che3.net.Association;
 import org.dcm4che3.net.service.QueryRetrieveLevel2;
 import org.dcm4chee.arc.conf.ArchiveAEExtension;
+import org.dcm4chee.arc.conf.MetadataFilter;
 import org.dcm4chee.arc.conf.QueryRetrieveView;
 import org.dcm4chee.arc.entity.CodeEntity;
+import org.dcm4chee.arc.entity.Location;
+import org.dcm4chee.arc.entity.Series;
 import org.dcm4chee.arc.storage.Storage;
 
 import javax.servlet.http.HttpServletRequest;
 import java.io.Closeable;
 import java.util.Collection;
+import java.util.Date;
+import java.util.List;
+import java.util.concurrent.ScheduledFuture;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
+ * @author Vrinda Nayak <vrinda.nayak@j4care.com>
  * @since Aug 2015
  */
 public interface RetrieveContext extends Closeable {
@@ -69,6 +76,14 @@ public interface RetrieveContext extends Closeable {
     Association getStoreAssociation();
 
     void setStoreAssociation(Association storeAssociation);
+
+    Association getForwardAssociation();
+
+    void setForwardAssociation(Association fwdas);
+
+    Association getFallbackAssociation();
+
+    void setFallbackAssociation(Association fallbackAssociation);
 
     HttpServletRequest getHttpRequest();
 
@@ -138,31 +153,45 @@ public interface RetrieveContext extends Closeable {
 
     void setSeriesInstanceUIDs(String... seriesInstanceUIDs);
 
+    Series.MetadataUpdate getSeriesMetadataUpdate();
+
+    void setSeriesMetadataUpdate(Series.MetadataUpdate metadataUpdate);
+
     String[] getSopInstanceUIDs();
 
     void setSopInstanceUIDs(String... sopInstanceUIDs);
 
-    Collection<InstanceLocations> getMatches();
+    Location.ObjectType getObjectType();
 
-    Collection<StudyInfo> getStudyInfos();
+    void setObjectType(Location.ObjectType objectType);
 
-    Collection<SeriesInfo> getSeriesInfos();
+    List<InstanceLocations> getMatches();
+
+    List<StudyInfo> getStudyInfos();
+
+    List<SeriesInfo> getSeriesInfos();
 
     int getNumberOfMatches();
 
     void setNumberOfMatches(int numberOfMatches);
 
-    void incrementNumberOfMatches(int inc);
-
     int completed();
 
     void incrementCompleted();
+
+    void addCompleted(int delta);
 
     int warning();
 
     void incrementWarning();
 
+    void addWarning(int delta);
+
     int failed();
+
+    void incrementFailed();
+
+    void addFailed(int delta);
 
     void addFailedSOPInstanceUID(String iuid);
 
@@ -191,4 +220,42 @@ public interface RetrieveContext extends Closeable {
     void decrementPendingCStoreForward();
 
     void waitForPendingCStoreForward() throws InterruptedException;
+
+    void addCStoreForward(InstanceLocations inst);
+
+    Collection<InstanceLocations> getCStoreForwards();
+
+    void setWritePendingRSP(ScheduledFuture<?> scheduledFuture);
+
+    void stopWritePendingRSP();
+
+    int getFallbackMoveRSPNumberOfMatches();
+
+    void setFallbackMoveRSPNumberOfMatches(int fallbackMoveRSPNumberOfMatches);
+
+    int getFallbackMoveRSPFailed();
+
+    void setFallbackMoveRSPFailed(int fallbackMoveRSPFailed);
+
+    String[] getFallbackMoveRSPFailedIUIDs();
+
+    void setFallbackMoveRSPFailedIUIDs(String[] fallbackMoveRSPFailedIUIDs);
+
+    boolean isRetryFailedRetrieve();
+
+    void setRetryFailedRetrieve(boolean retryFailedRetrieve);
+
+    Date getPatientUpdatedTime();
+
+    void setPatientUpdatedTime(Date patientUpdatedTime);
+
+    MetadataFilter getMetadataFilter();
+
+    void setMetadataFilter(MetadataFilter metadataFilter);
+
+    boolean isUpdateSeriesMetadata();
+
+    boolean isConsiderPurgedInstances();
+
+    boolean isRetrieveMetadata();
 }

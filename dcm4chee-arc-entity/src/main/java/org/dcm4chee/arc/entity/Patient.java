@@ -43,6 +43,7 @@ package org.dcm4chee.arc.entity;
 import org.dcm4che3.data.*;
 import org.dcm4che3.soundex.FuzzyStr;
 import org.dcm4chee.arc.conf.AttributeFilter;
+import org.dcm4chee.arc.conf.ShowPatientInfo;
 
 import javax.persistence.*;
 import java.util.*;
@@ -61,7 +62,7 @@ import java.util.*;
 @NamedQuery(
     name=Patient.FIND_BY_PATIENT_ID_EAGER,
     query="select p from Patient p " +
-            "join fetch p.patientName " +
+            "left join fetch p.patientName " +
             "join fetch p.attributesBlob " +
             "where p.patientID.id = ?1"),
 @NamedQuery(
@@ -71,7 +72,6 @@ import java.util.*;
 @NamedQuery(
     name=Patient.FIND_BY_PATIENT_FAMILY_NAME_EAGER,
     query="select p from Patient p " +
-            "left join fetch p.patientName " +
             "left join fetch p.patientName " +
             "join fetch p.attributesBlob " +
             "where p.patientName.familyName = ?1"),
@@ -88,6 +88,7 @@ import java.util.*;
 @Table(name = "patient",
     uniqueConstraints = @UniqueConstraint(columnNames = "patient_id_fk"),
     indexes = {
+        @Index(columnList = "num_studies"),
         @Index(columnList = "pat_birthdate"),
         @Index(columnList = "pat_sex"),
         @Index(columnList = "pat_custom1"),
@@ -142,6 +143,10 @@ public class Patient {
     @Column(name = "pat_custom3")
     private String patientCustomAttribute3;
 
+    @Basic(optional = false)
+    @Column(name = "num_studies")
+    private int numberOfStudies;
+
     @OneToOne(cascade = CascadeType.ALL, orphanRemoval = true, optional = false)
     @JoinColumn(name = "dicomattrs_fk")
     private AttributesBlob attributesBlob;
@@ -149,6 +154,10 @@ public class Patient {
     @OneToOne(cascade=CascadeType.ALL, orphanRemoval = true)
     @JoinColumn(name = "pat_name_fk")
     private PersonName patientName;
+
+    @OneToOne(cascade=CascadeType.ALL, orphanRemoval = true)
+    @JoinColumn(name = "resp_person_fk")
+    private PersonName responsiblePerson;
 
     @ManyToOne
     @JoinColumn(name = "merge_fk")
@@ -158,16 +167,32 @@ public class Patient {
     @JoinColumn(name = "patient_id_fk")
     private PatientID patientID;
 
+    private static ShowPatientInfo showPatientInfo = ShowPatientInfo.PLAIN_TEXT;
+
+    public static ShowPatientInfo getShowPatientInfo() {
+        return showPatientInfo;
+    }
+
+    public static void setShowPatientInfo(ShowPatientInfo showPatientInfo) {
+        Patient.showPatientInfo = showPatientInfo;
+    }
+
     @Override
     public String toString() {
-        return "Patient[pk=" + pk
-                + ", id=" + patientID
-                + ", name=" + patientName
-                + ", dob=" + patientBirthDate
-                + ", sex=" + patientSex
-                + "]";
+        StringBuilder sb = new StringBuilder(256);
+        sb.append("Patient[pk=").append(pk);
+        if (showPatientInfo == ShowPatientInfo.HASH_NAME_AND_ID && patientID != null)
+            sb.append(", id=#").append(patientID.toString().hashCode());
+        else
+            sb.append(", id=").append(patientID);
+        if (showPatientInfo != ShowPatientInfo.PLAIN_TEXT && patientName != null)
+            sb.append(", name=#").append(patientName.toString().hashCode());
+        else
+            sb.append(", name=").append(patientName);
+        sb.append(']');
+        return sb.toString();
     }
-    
+
     @PrePersist
     public void onPrePersist() {
         Date now = new Date();
@@ -212,6 +237,22 @@ public class Patient {
         return patientCustomAttribute3;
     }
 
+    public int getNumberOfStudies() {
+        return numberOfStudies;
+    }
+
+    public void setNumberOfStudies(int numberOfStudies) {
+        this.numberOfStudies = numberOfStudies;
+    }
+
+    public void incrementNumberOfStudies() {
+        numberOfStudies++;
+    }
+
+    public void decrementNumberOfStudies() {
+        numberOfStudies = Math.max(numberOfStudies-1, 0);
+    }
+
     public Patient getMergedWith() {
         return mergedWith;
     }
@@ -230,6 +271,10 @@ public class Patient {
 
     public void setPatientID(PatientID patientID) {
         this.patientID = patientID;
+    }
+
+    public PersonName getResponsiblePerson() {
+        return responsiblePerson;
     }
 
     public Attributes getAttributes() throws BlobCorruptedException {
@@ -253,6 +298,10 @@ public class Patient {
             attributesBlob = new AttributesBlob(new Attributes(attrs, filter.getSelection()));
         else
             attributesBlob.setAttributes(new Attributes(attrs, filter.getSelection()));
-    }
 
+        responsiblePerson = PersonName.valueOf(
+                attrs.getString(Tag.ResponsiblePerson), fuzzyStr, responsiblePerson);
+
+        updatedTime = new Date();
+    }
 }

@@ -50,6 +50,7 @@ import org.dcm4che3.soundex.FuzzyStr;
 import org.dcm4chee.arc.conf.ArchiveDeviceExtension;
 import org.dcm4chee.arc.conf.AttributeFilter;
 import org.dcm4chee.arc.conf.Entity;
+import org.dcm4chee.arc.entity.Patient;
 import org.dcm4chee.arc.patient.PatientMgtContext;
 
 import javax.servlet.http.HttpServletRequest;
@@ -57,6 +58,7 @@ import java.net.Socket;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
+ * @author Vrinda Nayak <vrinda.nayak@j4care.com>
  * @since Mar 2016
  */
 public class PatientMgtContextImpl implements PatientMgtContext {
@@ -72,8 +74,10 @@ public class PatientMgtContextImpl implements PatientMgtContext {
     private Attributes attributes;
     private IDWithIssuer previousPatientID;
     private Attributes previousAttributes;
+    private Attributes.UpdatePolicy attributeUpdatePolicy = Attributes.UpdatePolicy.OVERWRITE;
     private String eventActionCode;
     private Exception exception;
+    private Patient patient;
 
     PatientMgtContextImpl(Device device, HttpServletRequest httpRequest, Association as, ApplicationEntity ae,
                           Socket socket, HL7Segment msh) {
@@ -89,7 +93,9 @@ public class PatientMgtContextImpl implements PatientMgtContext {
 
     @Override
     public String toString() {
-        return as != null ? as.toString() : msh.toString();
+        return as != null ? as.toString()
+                : httpRequest != null ? httpRequest.getRemoteAddr()
+                : socket.toString();
     }
 
     @Override
@@ -165,6 +171,16 @@ public class PatientMgtContextImpl implements PatientMgtContext {
     }
 
     @Override
+    public Attributes.UpdatePolicy getAttributeUpdatePolicy() {
+        return attributeUpdatePolicy;
+    }
+
+    @Override
+    public void setAttributeUpdatePolicy(Attributes.UpdatePolicy updatePolicy) {
+        this.attributeUpdatePolicy = updatePolicy;
+    }
+
+    @Override
     public String getEventActionCode() {
         return eventActionCode;
     }
@@ -182,5 +198,20 @@ public class PatientMgtContextImpl implements PatientMgtContext {
     @Override
     public void setException(Exception exception) {
         this.exception = exception;
+    }
+
+    @Override
+    public void setPatientID(IDWithIssuer patientID) {
+        this.patientID = patientID;
+    }
+
+    @Override
+    public Patient getPatient() {
+        return patient;
+    }
+
+    @Override
+    public void setPatient(Patient patient) {
+        this.patient = patient;
     }
 }

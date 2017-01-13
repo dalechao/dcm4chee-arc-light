@@ -41,26 +41,65 @@
 package org.dcm4chee.arc.retrieve.impl;
 
 import org.dcm4che3.data.Attributes;
+import org.dcm4che3.data.Tag;
+import org.dcm4chee.arc.conf.Availability;
 import org.dcm4chee.arc.entity.Location;
 import org.dcm4chee.arc.retrieve.InstanceLocations;
 
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
+ * @author Vrinda Nayak <vrinda.nayak@j4care.com>
  * @since Aug 2015
  */
 public class InstanceLocationsImpl implements InstanceLocations {
     private final String sopClassUID;
     private final String sopInstanceUID;
     private final Attributes attributes;
-    private final ArrayList<Location> locations = new ArrayList<>();
+    private Attributes rejectionCode;
+    private String retrieveAETs;
+    private String extRetrieveAET;
+    private Availability availability;
+    private Date createdTime;
+    private Date updatedTime;
+    private boolean containsMetadata;
+    private final ArrayList<Location> locations = new ArrayList<>(1);
 
-    public InstanceLocationsImpl(String sopClassUID, String sopInstanceUID, Attributes attributes) {
-        this.sopClassUID = sopClassUID;
-        this.sopInstanceUID = sopInstanceUID;
-        this.attributes = attributes;
+    public InstanceLocationsImpl(Attributes attrs) {
+        this.sopClassUID = attrs.getString(Tag.SOPClassUID);
+        this.sopInstanceUID = attrs.getString(Tag.SOPInstanceUID);
+        this.attributes = attrs;
+    }
+
+    public void setRejectionCode(Attributes rejectionCode) {
+        this.rejectionCode = rejectionCode;
+    }
+
+    public void setRetrieveAETs(String retrieveAETs) {
+        this.retrieveAETs = retrieveAETs;
+    }
+
+    public void setExternalRetrieveAET(String extRetrieveAET) {
+        this.extRetrieveAET = extRetrieveAET;
+    }
+
+    public void setAvailability(Availability availability) {
+        this.availability = availability;
+    }
+
+    public void setCreatedTime(Date createdTime) {
+        this.createdTime = createdTime;
+    }
+
+    public void setUpdatedTime(Date updatedTime) {
+        this.updatedTime = updatedTime;
+    }
+
+    public void setContainsMetadata(boolean containsMetadata) {
+        this.containsMetadata = containsMetadata;
     }
 
     @Override
@@ -86,5 +125,36 @@ public class InstanceLocationsImpl implements InstanceLocations {
     @Override
     public Attributes getAttributes() {
         return attributes;
+    }
+
+    @Override
+    public String getRetrieveAETs() {
+        return retrieveAETs;
+    }
+
+    @Override
+    public String getExternalRetrieveAET() {
+        return extRetrieveAET;
+    }
+
+    @Override
+    public Availability getAvailability() {
+        return availability;
+    }
+
+    @Override
+    public Date getCreatedTime() { return createdTime; }
+
+    @Override
+    public Date getUpdatedTime() { return updatedTime; }
+
+    @Override
+    public Attributes getRejectionCode() {
+        return rejectionCode;
+    }
+
+    @Override
+    public boolean isContainsMetadata() {
+        return containsMetadata;
     }
 }

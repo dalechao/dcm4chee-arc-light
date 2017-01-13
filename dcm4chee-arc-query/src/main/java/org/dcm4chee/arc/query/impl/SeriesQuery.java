@@ -47,14 +47,19 @@ import com.querydsl.jpa.hibernate.HibernateQuery;
 import org.dcm4che3.data.Attributes;
 import org.dcm4che3.data.Tag;
 import org.dcm4che3.data.VR;
+import org.dcm4che3.dict.archive.ArchiveTag;
+import org.dcm4che3.net.service.QueryRetrieveLevel2;
+import org.dcm4che3.util.StringUtils;
 import org.dcm4chee.arc.conf.Availability;
 import org.dcm4chee.arc.entity.*;
 import org.dcm4chee.arc.query.util.QueryBuilder;
 import org.dcm4chee.arc.query.QueryContext;
+import org.dcm4chee.arc.query.util.QueryParam;
 import org.hibernate.StatelessSession;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
+ * @author Vrinda Nayak <vrinda.nayak@j4care.com>
  * @since Aug 2015
  */
 class SeriesQuery extends AbstractQuery {
@@ -62,6 +67,33 @@ class SeriesQuery extends AbstractQuery {
     private static final Expression<?>[] SELECT = {
             QStudy.study.pk,
             QSeries.series.pk,
+            QPatient.patient.numberOfStudies,
+            QPatient.patient.createdTime,
+            QPatient.patient.updatedTime,
+            QStudy.study.createdTime,
+            QStudy.study.updatedTime,
+            QStudy.study.accessTime,
+            QStudy.study.expirationDate,
+            QStudy.study.rejectionState,
+            QStudy.study.failedSOPInstanceUIDList,
+            QStudy.study.failedRetrieves,
+            QStudy.study.accessControlID,
+            QStudy.study.storageIDs,
+            QSeries.series.createdTime,
+            QSeries.series.updatedTime,
+            QSeries.series.expirationDate,
+            QSeries.series.rejectionState,
+            QSeries.series.failedSOPInstanceUIDList,
+            QSeries.series.failedRetrieves,
+            QSeries.series.sourceAET,
+            QSeries.series.externalRetrieveAET,
+            QSeries.series.metadataScheduledUpdateTime,
+            QSeries.series.instancePurgeTime,
+            QSeries.series.instancePurgeState,
+            QMetadata.metadata.storageID,
+            QMetadata.metadata.storagePath,
+            QMetadata.metadata.digest,
+            QMetadata.metadata.size,
             QSeriesQueryAttributes.seriesQueryAttributes.numberOfInstances,
             QStudyQueryAttributes.studyQueryAttributes.numberOfInstances,
             QStudyQueryAttributes.studyQueryAttributes.numberOfSeries,
@@ -95,6 +127,7 @@ class SeriesQuery extends AbstractQuery {
                 context.getQueryKeys(),
                 context.getQueryParam(),
                 context.isOrderByPatientName());
+        q = q.leftJoin(QSeries.series.metadata, QMetadata.metadata);
         BooleanBuilder predicates = new BooleanBuilder();
         QueryBuilder.addPatientLevelPredicates(predicates,
                 context.getPatientIDs(),
@@ -102,10 +135,10 @@ class SeriesQuery extends AbstractQuery {
                 context.getQueryParam());
         QueryBuilder.addStudyLevelPredicates(predicates,
                 context.getQueryKeys(),
-                context.getQueryParam());
+                context.getQueryParam(), QueryRetrieveLevel2.SERIES);
         QueryBuilder.addSeriesLevelPredicates(predicates,
                 context.getQueryKeys(),
-                context.getQueryParam());
+                context.getQueryParam(), QueryRetrieveLevel2.SERIES);
         return q.where(predicates);
     }
 
@@ -117,21 +150,22 @@ class SeriesQuery extends AbstractQuery {
         int numberOfSeriesRelatedInstances;
         String retrieveAETs;
         Availability availability;
+        QueryParam queryParam = context.getQueryParam();
         if (numberOfInstancesI != null) {
             numberOfSeriesRelatedInstances = numberOfInstancesI;
-            if (numberOfSeriesRelatedInstances == 0) {
+            if (numberOfSeriesRelatedInstances == 0 && !queryParam.isReturnEmpty()) {
                 return null;
             }
             retrieveAETs = results.get(QSeriesQueryAttributes.seriesQueryAttributes.retrieveAETs);
             availability = results.get(QSeriesQueryAttributes.seriesQueryAttributes.availability);
         } else {
             SeriesQueryAttributes seriesView = context.getQueryService()
-                    .calculateSeriesQueryAttributes(seriesPk, context.getQueryParam());
+                    .calculateSeriesQueryAttributesIfNotExists(seriesPk, queryParam);
             numberOfSeriesRelatedInstances = seriesView.getNumberOfInstances();
-            if (numberOfSeriesRelatedInstances == 0) {
+            if (numberOfSeriesRelatedInstances == 0 && !queryParam.isReturnEmpty()) {
                 return null;
             }
-            retrieveAETs = seriesView.getRawRetrieveAETs();
+            retrieveAETs = seriesView.getRetrieveAETs();
             availability = seriesView.getAvailability();
         }
 
@@ -145,9 +179,47 @@ class SeriesQuery extends AbstractQuery {
         Attributes attrs = new Attributes(studyAttrs.size() + seriesAttrs.size() + 3);
         attrs.addAll(studyAttrs);
         attrs.addAll(seriesAttrs);
-        attrs.setString(Tag.RetrieveAETitle, VR.AE, retrieveAETs);
-        attrs.setString(Tag.InstanceAvailability, VR.CS, availability.toString());
+        String externalRetrieveAET = results.get(QSeries.series.externalRetrieveAET);
+        attrs.setString(Tag.RetrieveAETitle, VR.AE, splitAndAppend(retrieveAETs, externalRetrieveAET));
+        attrs.setString(Tag.InstanceAvailability, VR.CS,
+            StringUtils.maskNull(availability, Availability.UNAVAILABLE).toString());
         attrs.setInt(Tag.NumberOfSeriesRelatedInstances, VR.IS, numberOfSeriesRelatedInstances);
+        attrs.setDate(ArchiveTag.PrivateCreator, ArchiveTag.SeriesReceiveDateTime, VR.DT,
+                results.get(QSeries.series.createdTime));
+        attrs.setDate(ArchiveTag.PrivateCreator, ArchiveTag.SeriesUpdateDateTime, VR.DT,
+                results.get(QSeries.series.updatedTime));
+        if (results.get(QSeries.series.expirationDate) != null)
+            attrs.setString(ArchiveTag.PrivateCreator, ArchiveTag.SeriesExpirationDate, VR.DA,
+                    results.get(QSeries.series.expirationDate));
+        attrs.setString(ArchiveTag.PrivateCreator, ArchiveTag.SeriesRejectionState, VR.CS,
+                results.get(QSeries.series.rejectionState).toString());
+        if (results.get(QSeries.series.failedSOPInstanceUIDList) != null)
+            attrs.setString(ArchiveTag.PrivateCreator, ArchiveTag.MissingSOPInstanceUIDListOfSeries, VR.UI,
+                    results.get(QSeries.series.failedSOPInstanceUIDList));
+        if (results.get(QSeries.series.failedRetrieves) != 0)
+            attrs.setInt(ArchiveTag.PrivateCreator, ArchiveTag.FailedRetrievesOfSeries, VR.US,
+                    results.get(QSeries.series.failedRetrieves));
+        attrs.setString(ArchiveTag.PrivateCreator, ArchiveTag.SendingApplicationEntityTitleOfSeries, VR.AE,
+                results.get(QSeries.series.sourceAET));
+        if (results.get(QSeries.series.metadataScheduledUpdateTime) != null)
+            attrs.setDate(ArchiveTag.PrivateCreator, ArchiveTag.ScheduledMetadataUpdateDateTimeOfSeries, VR.DT,
+                    results.get(QSeries.series.metadataScheduledUpdateTime));
+        if (results.get(QSeries.series.instancePurgeTime) != null)
+            attrs.setDate(ArchiveTag.PrivateCreator, ArchiveTag.ScheduledInstanceRecordPurgeDateTimeOfSeries, VR.DT,
+                    results.get(QSeries.series.instancePurgeTime));
+        attrs.setString(ArchiveTag.PrivateCreator, ArchiveTag.InstanceRecordPurgeStateOfSeries, VR.CS,
+                results.get(QSeries.series.instancePurgeState).name());
+        if (results.get(QMetadata.metadata.storageID) != null) {
+            attrs.setString(ArchiveTag.PrivateCreator, ArchiveTag.SeriesMetadataStorageID, VR.LO,
+                    results.get(QMetadata.metadata.storageID));
+            attrs.setString(ArchiveTag.PrivateCreator, ArchiveTag.SeriesMetadataStoragePath, VR.LO,
+                    StringUtils.split(results.get(QMetadata.metadata.storagePath), '/'));
+            attrs.setInt(ArchiveTag.PrivateCreator, ArchiveTag.SeriesMetadataStorageObjectSize, VR.UL,
+                    results.get(QMetadata.metadata.size).intValue());
+            if (results.get(QMetadata.metadata.digest) != null)
+                attrs.setString(ArchiveTag.PrivateCreator, ArchiveTag.SeriesMetadataStorageObjectDigest, VR.LO,
+                        results.get(QMetadata.metadata.digest));
+        }
         return attrs;
     }
 
@@ -167,8 +239,8 @@ class SeriesQuery extends AbstractQuery {
                     .calculateStudyQueryAttributes(studyPk, context.getQueryParam());
             numberOfStudyRelatedInstances = studyView.getNumberOfInstances();
             numberOfStudyRelatedSeries = studyView.getNumberOfSeries();
-            modalitiesInStudy = studyView.getRawModalitiesInStudy();
-            sopClassesInStudy = studyView.getRawSOPClassesInStudy();
+            modalitiesInStudy = studyView.getModalitiesInStudy();
+            sopClassesInStudy = studyView.getSOPClassesInStudy();
         }
 
         Attributes patAttrs = AttributesBlob.decodeAttributes(
@@ -181,8 +253,34 @@ class SeriesQuery extends AbstractQuery {
         attrs.addAll(studyAttrs);
         attrs.setString(Tag.ModalitiesInStudy, VR.CS, modalitiesInStudy);
         attrs.setString(Tag.SOPClassesInStudy, VR.UI, sopClassesInStudy);
+        attrs.setInt(Tag.NumberOfPatientRelatedStudies, VR.IS, results.get(QPatient.patient.numberOfStudies));
         attrs.setInt(Tag.NumberOfStudyRelatedSeries, VR.IS, numberOfStudyRelatedSeries);
         attrs.setInt(Tag.NumberOfStudyRelatedInstances, VR.IS, numberOfStudyRelatedInstances);
+        attrs.setDate(ArchiveTag.PrivateCreator, ArchiveTag.PatientCreateDateTime, VR.DT,
+                results.get(QPatient.patient.createdTime));
+        attrs.setDate(ArchiveTag.PrivateCreator, ArchiveTag.PatientUpdateDateTime, VR.DT,
+                results.get(QPatient.patient.updatedTime));
+        attrs.setDate(ArchiveTag.PrivateCreator, ArchiveTag.StudyReceiveDateTime, VR.DT,
+                results.get(QStudy.study.createdTime));
+        attrs.setDate(ArchiveTag.PrivateCreator, ArchiveTag.StudyUpdateDateTime, VR.DT,
+                results.get(QStudy.study.updatedTime));
+        attrs.setDate(ArchiveTag.PrivateCreator, ArchiveTag.StudyAccessDateTime, VR.DT,
+                results.get(QStudy.study.accessTime));
+        if (results.get(QStudy.study.expirationDate) != null)
+            attrs.setString(ArchiveTag.PrivateCreator, ArchiveTag.StudyExpirationDate, VR.DA,
+                    results.get(QStudy.study.expirationDate));
+        attrs.setString(ArchiveTag.PrivateCreator, ArchiveTag.StudyRejectionState, VR.CS,
+                results.get(QStudy.study.rejectionState).toString());
+        if (results.get(QStudy.study.failedSOPInstanceUIDList) != null)
+            attrs.setString(ArchiveTag.PrivateCreator, ArchiveTag.MissingSOPInstanceUIDListOfStudy, VR.UI,
+                    results.get(QStudy.study.failedSOPInstanceUIDList));
+        if (results.get(QStudy.study.failedRetrieves) != 0)
+            attrs.setInt(ArchiveTag.PrivateCreator, ArchiveTag.FailedRetrievesOfStudy, VR.US,
+                    results.get(QStudy.study.failedRetrieves));
+        attrs.setString(ArchiveTag.PrivateCreator, ArchiveTag.StudyAccessControlID, VR.LO,
+                results.get(QStudy.study.accessControlID));
+        attrs.setString(ArchiveTag.PrivateCreator, ArchiveTag.StorageIDsOfStudy, VR.LO,
+                results.get(QStudy.study.storageIDs));
         return attrs;
     }
 

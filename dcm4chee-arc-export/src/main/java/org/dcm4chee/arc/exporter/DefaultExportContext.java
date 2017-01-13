@@ -1,9 +1,11 @@
 package org.dcm4chee.arc.exporter;
 
-import org.dcm4chee.arc.conf.Entity;
+
+import org.dcm4chee.arc.qmgt.Outcome;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
+ * @author Vrinda Nayak <vrinda.nayak@j4care.com>
  * @since Oct 2015
  */
 public class DefaultExportContext implements ExportContext {
@@ -14,6 +16,9 @@ public class DefaultExportContext implements ExportContext {
     private String seriesInstanceUID;
     private String sopInstanceUID;
     private String aeTitle;
+    private Outcome outcome;
+    private boolean onlyStgCmt;
+    private boolean onlyIAN;
 
     public DefaultExportContext(Exporter exporter) {
         this.exporter = exporter;
@@ -72,5 +77,35 @@ public class DefaultExportContext implements ExportContext {
     @Override
     public void setAETitle(String aeTitle) {
         this.aeTitle = aeTitle;
+    }
+
+    @Override
+    public Outcome getOutcome() {
+        return outcome;
+    }
+
+    @Override
+    public void setOutcome(Outcome outcome) {
+        this.outcome = outcome;
+    }
+
+    @Override
+    public boolean isOnlyStgCmt() {
+        return onlyStgCmt;
+    }
+
+    @Override
+    public void setOnlyStgCmt(boolean onlyStgCmt) {
+        this.onlyStgCmt = onlyStgCmt;
+    }
+
+    @Override
+    public boolean isOnlyIAN() {
+        return onlyIAN;
+    }
+
+    @Override
+    public void setOnlyIAN(boolean onlyIAN) {
+        this.onlyIAN = onlyIAN;
     }
 }

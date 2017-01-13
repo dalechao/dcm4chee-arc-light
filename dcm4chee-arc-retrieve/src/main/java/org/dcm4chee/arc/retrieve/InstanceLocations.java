@@ -41,12 +41,15 @@
 package org.dcm4chee.arc.retrieve;
 
 import org.dcm4che3.data.Attributes;
+import org.dcm4chee.arc.conf.Availability;
 import org.dcm4chee.arc.entity.Location;
 
+import java.util.Date;
 import java.util.List;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
+ * @author Vrinda Nayak <vrinda.nayak@j4care.com>
  * @since Aug 2015
  */
 public interface InstanceLocations {
@@ -57,4 +60,18 @@ public interface InstanceLocations {
     List<Location> getLocations();
 
     Attributes getAttributes();
+
+    String getRetrieveAETs();
+
+    String getExternalRetrieveAET();
+
+    Availability getAvailability();
+
+    Date getCreatedTime();
+
+    Date getUpdatedTime();
+
+    Attributes getRejectionCode();
+
+    boolean isContainsMetadata();
 }

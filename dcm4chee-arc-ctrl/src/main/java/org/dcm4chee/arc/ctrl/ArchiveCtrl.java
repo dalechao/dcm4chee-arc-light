@@ -41,17 +41,20 @@
 package org.dcm4chee.arc.ctrl;
 
 import org.dcm4chee.arc.ArchiveService;
+import org.jboss.resteasy.annotations.cache.NoCache;
 
 import javax.enterprise.context.RequestScoped;
 import javax.inject.Inject;
 import javax.servlet.http.HttpServletRequest;
 import javax.ws.rs.GET;
+import javax.ws.rs.POST;
 import javax.ws.rs.Path;
 import javax.ws.rs.Produces;
 import javax.ws.rs.core.Context;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
+ * @author Vrinda Nayak <vrinda.nayak@j4care.com>
  * @since Jul 2015
  */
 @Path("/ctrl")
@@ -64,25 +67,26 @@ public class ArchiveCtrl {
     @Context
     private HttpServletRequest request;
 
-    @GET
+    @POST
     @Path("start")
     public void start() throws Exception {
         service.start(request);
     }
 
-    @GET
+    @POST
     @Path("stop")
     public void stop() {
         service.stop(request);
     }
 
-    @GET
+    @POST
     @Path("reload")
     public void reload() throws Exception {
         service.reload(request);
     }
 
     @GET
+    @NoCache
     @Path("status")
     @Produces("application/json")
     public String status() {

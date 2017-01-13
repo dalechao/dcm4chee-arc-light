@@ -45,8 +45,11 @@ import org.dcm4che3.data.Tag;
 import org.dcm4che3.soundex.FuzzyStr;
 import org.dcm4che3.util.DateUtils;
 import org.dcm4chee.arc.conf.AttributeFilter;
+import org.dcm4chee.arc.conf.Duration;
 
 import javax.persistence.*;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
@@ -56,6 +59,7 @@ import java.util.Date;
  * @author Justin Falk <jfalkmu@gmail.com>
  * @author Gunter Zeilinger <gunterze@gmail.com>
  * @author Michael Backhaus <michael.backhaus@agfa.com>
+ * @author Vrinda Nayak <vrinda.nayak@j4care.com>
  */
 @NamedQueries({
 @NamedQuery(
@@ -64,6 +68,13 @@ import java.util.Date;
             "join se.study st " +
             "where st.studyInstanceUID = ?1 " +
             "and se.seriesInstanceUID = ?2 "),
+@NamedQuery(
+        name=Series.FIND_SERIES_OF_STUDY_BY_STUDY_IUID_EAGER,
+        query="select se from Series se " +
+                "join fetch se.study st " +
+                "join fetch se.attributesBlob " +
+                "join fetch st.attributesBlob " +
+                "where st.studyInstanceUID = ?1 "),
 @NamedQuery(
     name=Series.FIND_BY_SERIES_IUID_EAGER,
     query="select se from Series se " +
@@ -105,7 +116,48 @@ import java.util.Date;
 @NamedQuery(
     name=Series.COUNT_SERIES_OF_STUDY,
     query="select count(se) from Series se " +
-            "where se.study = ?1")
+            "where se.study = ?1"),
+@NamedQuery(
+        name=Series.GET_EXPIRED_SERIES,
+        query="select se from Series se " +
+             "where se.expirationDate <= ?1"),
+@NamedQuery(
+        name=Series.FIND_SERIES_OF_STUDY,
+        query = "select se from Series se " +
+                "where se.study.studyInstanceUID = ?1"),
+@NamedQuery(
+        name=Series.COUNT_SERIES_OF_STUDY_WITH_OTHER_REJECTION_STATE,
+        query="select count(se) from Series se " +
+                "where se.study = ?1 and se.rejectionState <> ?2"),
+@NamedQuery(
+        name=Series.SERIES_IUIDS_OF_STUDY,
+        query="select se.study.studyInstanceUID, se.seriesInstanceUID from Series se " +
+                "where se.study.studyInstanceUID = ?1"),
+@NamedQuery(
+        name = Series.SCHEDULED_METADATA_UPDATE,
+        query = "select new org.dcm4chee.arc.entity.Series$MetadataUpdate(se.pk, se.instancePurgeState, metadata.storageID, metadata.storagePath) from Series se " +
+                "left join se.metadata metadata " +
+                "where se.metadataScheduledUpdateTime < current_timestamp " +
+                "order by se.metadataScheduledUpdateTime"),
+@NamedQuery(
+        name = Series.SCHEDULED_PURGE_INSTANCES,
+        query = "select se.pk from Series se " +
+                "where se.instancePurgeTime < current_timestamp " +
+                "and se.metadata is not null " +
+                "and se.metadataScheduledUpdateTime is null " +
+                "order by se.instancePurgeTime"),
+@NamedQuery(
+        name=Series.SCHEDULE_METADATA_UPDATE_FOR_PATIENT,
+        query = "update Series se set se.metadataScheduledUpdateTime = current_timestamp " +
+                "where se in (select se1 from Series se1 where se1.study.patient = ?1 " +
+                "and se1.metadata is not null " +
+                "and se1.metadataScheduledUpdateTime is null)"),
+@NamedQuery(
+        name=Series.SCHEDULE_METADATA_UPDATE_FOR_STUDY,
+        query = "update Series se set se.metadataScheduledUpdateTime = current_timestamp " +
+                "where se in (select se1 from Series se1 where se1.study = ?1 " +
+                "and se1.metadata is not null " +
+                "and se1.metadataScheduledUpdateTime is null)"),
 })
 @Entity
 @Table(name = "series",
@@ -124,11 +176,18 @@ import java.util.Date;
         @Index(columnList = "department"),
         @Index(columnList = "series_custom1"),
         @Index(columnList = "series_custom2"),
-        @Index(columnList = "series_custom3")
+        @Index(columnList = "series_custom3"),
+        @Index(columnList = "expiration_date"),
+        @Index(columnList = "failed_retrieves"),
+        @Index(columnList = "failed_iuids"),
+        @Index(columnList = "metadata_update_time"),
+        @Index(columnList = "inst_purge_time"),
+        @Index(columnList = "inst_purge_state")
 })
 public class Series {
 
     public static final java.lang.String FIND_BY_SERIES_IUID = "Series.findBySeriesIUID";
+    public static final java.lang.String FIND_SERIES_OF_STUDY_BY_STUDY_IUID_EAGER = "Series.findSeriesOfStudyByStudyIUIDEager";
     public static final java.lang.String FIND_BY_SERIES_IUID_EAGER = "Series.findBySeriesIUIDEager";
     public static final java.lang.String COUNT_SERIES_OF_STUDY = "Series.countSeriesOfStudy";
     public static final String SET_FAILED_SOP_INSTANCE_UID_LIST = "Series.SetFailedSOPInstanceUIDList";
@@ -136,6 +195,30 @@ public class Series {
     public static final String INCREMENT_FAILED_RETRIEVES = "Series.IncrementFailedRetrieves";
     public static final String CLEAR_FAILED_SOP_INSTANCE_UID_LIST = "Series.ClearFailedSOPInstanceUIDList";
     public static final String CLEAR_FAILED_SOP_INSTANCE_UID_LIST_OF_STUDY = "Series.ClearFailedSOPInstanceUIDListOfStudy";
+    public static final String GET_EXPIRED_SERIES = "Series.GetExpiredSeries";
+    public static final String FIND_SERIES_OF_STUDY = "Series.FindSeriesOfStudy";
+    public static final String COUNT_SERIES_OF_STUDY_WITH_OTHER_REJECTION_STATE = "Series.countSeriesOfStudyWithOtherRejectionState";
+    public static final String SERIES_IUIDS_OF_STUDY = "Series.seriesIUIDsOfStudy";
+    public static final String SCHEDULED_METADATA_UPDATE = "Series.scheduledMetadataUpdate";
+    public static final String SCHEDULED_PURGE_INSTANCES = "Series.scheduledPurgeInstances";
+    public static final String SCHEDULE_METADATA_UPDATE_FOR_PATIENT = "Series.scheduleMetadataUpdateForPatient";
+    public static final String SCHEDULE_METADATA_UPDATE_FOR_STUDY = "Series.scheduleMetadataUpdateForStudy";
+
+    public enum InstancePurgeState { NO, PURGED, FAILED_TO_PURGE }
+
+    public static class MetadataUpdate {
+        public final Long seriesPk;
+        public final InstancePurgeState instancePurgeState;
+        public final String storageID;
+        public final String storagePath;
+
+        public MetadataUpdate(Long seriesPk, InstancePurgeState instancePurgeState, String storageID, String storagePath) {
+            this.seriesPk = seriesPk;
+            this.instancePurgeState = instancePurgeState;
+            this.storageID = storageID;
+            this.storagePath = storagePath;
+        }
+    }
 
     @Id
     @GeneratedValue(strategy=GenerationType.IDENTITY)
@@ -167,9 +250,8 @@ public class Series {
     @Column(name = "series_iuid", updatable = false)
     private String seriesInstanceUID;
 
-    @Basic(optional = false)
     @Column(name = "series_no")
-    private String seriesNumber;
+    private Integer seriesNumber;
 
     @Basic(optional = false)
     @Column(name = "series_desc")
@@ -230,9 +312,29 @@ public class Series {
     @Column(name = "src_aet")
     private String sourceAET;
 
+    @Column(name = "ext_retrieve_aet")
+    private String externalRetrieveAET;
+
     @Basic(optional = false)
     @Column(name = "rejection_state")
     private RejectionState rejectionState;
+
+    @Basic
+    @Column(name = "expiration_date")
+    private String expirationDate;
+
+    @Basic
+    @Column(name = "metadata_update_time")
+    private Date metadataScheduledUpdateTime;
+
+    @Basic
+    @Column(name = "inst_purge_time")
+    private Date instancePurgeTime;
+
+    @Basic(optional = false)
+    @Enumerated(EnumType.ORDINAL)
+    @Column(name = "inst_purge_state")
+    private InstancePurgeState instancePurgeState;
 
     @OneToOne(cascade=CascadeType.ALL, orphanRemoval = true, optional = false)
     @JoinColumn(name = "dicomattrs_fk")
@@ -256,6 +358,10 @@ public class Series {
     @ManyToOne(optional = false)
     @JoinColumn(name = "study_fk")
     private Study study;
+
+    @OneToOne
+    @JoinColumn(name = "metadata_fk")
+    private Metadata metadata;
 
     @Override
     public String toString() {
@@ -294,7 +400,7 @@ public class Series {
         return seriesInstanceUID;
     }
 
-    public String getSeriesNumber() {
+    public Integer getSeriesNumber() {
         return seriesNumber;
     }
 
@@ -366,12 +472,77 @@ public class Series {
         this.sourceAET = sourceAET;
     }
 
+    public String getExternalRetrieveAET() {
+        return externalRetrieveAET;
+    }
+
+    public void setExternalRetrieveAET(String externalRetrieveAET) {
+        this.externalRetrieveAET = externalRetrieveAET;
+    }
+
     public RejectionState getRejectionState() {
         return rejectionState;
     }
 
     public void setRejectionState(RejectionState rejectionState) {
         this.rejectionState = rejectionState;
+    }
+
+    public LocalDate getExpirationDate() {
+        return expirationDate != null ? LocalDate.parse(expirationDate, DateTimeFormatter.BASIC_ISO_DATE) : null;
+    }
+
+    public void setExpirationDate(LocalDate expirationDate) {
+        if (expirationDate != null) {
+            try {
+                this.expirationDate = DateTimeFormatter.BASIC_ISO_DATE.format(expirationDate);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        } else
+            this.expirationDate = null;
+    }
+
+    public Date getMetadataScheduledUpdateTime() {
+        return metadataScheduledUpdateTime;
+    }
+
+    public void setMetadataScheduledUpdateTime(Date metadataScheduledUpdateTime) {
+        this.metadataScheduledUpdateTime = metadataScheduledUpdateTime;
+    }
+
+    public void scheduleMetadataUpdate(Duration delay) {
+        if (delay != null && metadataScheduledUpdateTime == null)
+            metadataScheduledUpdateTime = new Date(System.currentTimeMillis() + delay.getSeconds() * 1000L);
+    }
+
+    public Date getInstancePurgeTime() {
+        return instancePurgeTime;
+    }
+
+    public void setInstancePurgeTime(Date instancePurgeTime) {
+        this.instancePurgeTime = instancePurgeTime;
+    }
+
+    public void scheduleInstancePurge(Duration delay) {
+        if (delay != null && instancePurgeTime == null)
+            instancePurgeTime = new Date(System.currentTimeMillis() + delay.getSeconds() * 1000L);
+    }
+
+    public InstancePurgeState getInstancePurgeState() {
+        return instancePurgeState;
+    }
+
+    public void setInstancePurgeState(InstancePurgeState instancePurgeState) {
+        this.instancePurgeState = instancePurgeState;
+    }
+
+    public String getFailedSOPInstanceUIDList() {
+        return failedSOPInstanceUIDList;
+    }
+
+    public void setFailedSOPInstanceUIDList(String failedSOPInstanceUIDList) {
+        this.failedSOPInstanceUIDList = failedSOPInstanceUIDList;
     }
 
     public CodeEntity getInstitutionCode() {
@@ -397,13 +568,21 @@ public class Series {
         this.study = study;
     }
 
+    public Metadata getMetadata() {
+        return metadata;
+    }
+
+    public void setMetadata(Metadata metadata) {
+        this.metadata = metadata;
+    }
+
     public Attributes getAttributes() throws BlobCorruptedException {
         return attributesBlob.getAttributes();
     }
 
     public void setAttributes(Attributes attrs, AttributeFilter filter, FuzzyStr fuzzyStr) {
         seriesInstanceUID = attrs.getString(Tag.SeriesInstanceUID);
-        seriesNumber = attrs.getString(Tag.SeriesNumber, "*");
+        seriesNumber = getInt(attrs, Tag.SeriesNumber);
         seriesDescription = attrs.getString(Tag.SeriesDescription, "*");
         institutionName = attrs.getString(Tag.InstitutionName, "*");
         institutionalDepartmentName = attrs.getString(Tag.InstitutionalDepartmentName, "*");
@@ -444,6 +623,16 @@ public class Series {
             attributesBlob = new AttributesBlob(new Attributes(attrs, filter.getSelection()));
         else
             attributesBlob.setAttributes(new Attributes(attrs, filter.getSelection()));
+        updatedTime = new Date();
     }
 
+    private Integer getInt(Attributes attrs, int tag) {
+        String val = attrs.getString(tag);
+        if (val != null)
+            try {
+                return Integer.valueOf(val);
+            } catch (NumberFormatException e) {
+            }
+        return null;
+    }
 }

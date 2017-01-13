@@ -53,7 +53,7 @@
         "operationId": "SearchForPatients",
         "produces": [
           "multipart/related;type=application/dicom+xml",
-          "multipart/related;type=application/json"
+          "type=application/json"
         ],
         "parameters": [
           {
@@ -92,6 +92,13 @@
               "type": "string"
             },
             "collectionFormat": "multi"
+          },
+          {
+            "name": "withoutstudies",
+            "in": "query",
+            "description": "return Patient w/o Studies",
+            "type": "boolean",
+            "default": true
           },
           {
             "name": "fuzzymatching",
@@ -140,7 +147,7 @@
         "operationId": "SearchForStudies",
         "produces": [
           "multipart/related;type=application/dicom+xml",
-          "multipart/related;type=application/json"
+          "application/json"
         ],
         "parameters": [
           {
@@ -181,6 +188,34 @@
             "collectionFormat": "multi"
           },
           {
+            "name": "returnempty",
+            "in": "query",
+            "description": "return also empty Studies",
+            "type": "boolean",
+            "default": false
+          },
+          {
+            "name": "expired",
+            "in": "query",
+            "description": "return only expired Studies",
+            "type": "boolean",
+            "default": false
+          },
+          {
+            "name": "incomplete",
+            "in": "query",
+            "description": "return only Studies which are marked as incomplete",
+            "type": "boolean",
+            "default": false
+          },
+          {
+            "name": "retrievefailed",
+            "in": "query",
+            "description": "return only Studies which failed to be retrieved from fallback C-MOVE SCP",
+            "type": "boolean",
+            "default": false
+          },
+          {
             "name": "fuzzymatching",
             "in": "query",
             "description": "fuzzy semantic matching of person names",
@@ -200,6 +235,18 @@
             "description": "limit={maximumResults}",
             "type": "integer",
             "default": 50
+          },
+          {
+            "name": "SendingApplicationEntityTitleOfSeries",
+            "in": "query",
+            "description": "return Studies which includes at least one Series received from <AE Title>",
+            "type": "string"
+          },
+          {
+            "name": "StudyReceiveDateTime",
+            "in": "query",
+            "description": "return Studies which were created between <datetime1>-<datetime2>",
+            "type": "string"
           }
         ],
         "responses": {
@@ -216,6 +263,45 @@
             "description": "unexpected error"
           }
         }
+      },
+      "post": {
+        "tags": [
+          "STOW-RS"
+        ],
+        "summary": "Store Instances",
+        "operationId": "StoreInstances",
+        "consumes": [
+          "multipart/related;type=application/dicom;boundary={messageBoundary}",
+          "multipart/related;type=application/dicom+xml;boundary={messageBoundary}",
+          "multipart/related;type=application/json;boundary={messageBoundary}"
+        ],
+        "produces": [
+          "multipart/related;type=application/dicom+xml",
+          "multipart/related;type=application/json"
+        ],
+        "parameters": [
+          {
+            "name": "aet",
+            "in": "path",
+            "description": "Archive AE Title",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "object",
+            "schema": {
+              "type": "file"
+            }
+          },
+          "404": {
+            "description": "object not found"
+          },
+          "default": {
+            "description": "unexpected error"
+          }
+        }
       }
     },
     "/aets/{aet}/rs/studies/{StudyInstanceUID}/series": {
@@ -224,10 +310,10 @@
           "QIDO-RS"
         ],
         "summary": "Search for Series of Study",
-        "operationId": "SearchForSeriesOfStudy",
+        "operationId": "SearchForStudySeries",
         "produces": [
           "multipart/related;type=application/dicom+xml",
-          "multipart/related;type=application/json"
+          "application/json"
         ],
         "parameters": [
           {
@@ -240,7 +326,7 @@
           {
             "name": "StudyInstanceUID",
             "in": "path",
-            "description": "study instance UID for a single study",
+            "description": "Study Instance UID for a single Study",
             "required": true,
             "type": "string"
           },
@@ -275,6 +361,34 @@
             "collectionFormat": "multi"
           },
           {
+            "name": "returnempty",
+            "in": "query",
+            "description": "return also empty Series",
+            "type": "boolean",
+            "default": false
+          },
+          {
+            "name": "expired",
+            "in": "query",
+            "description": "return only expired Series",
+            "type": "boolean",
+            "default": false
+          },
+          {
+            "name": "incomplete",
+            "in": "query",
+            "description": "return only Series which are marked as incomplete",
+            "type": "boolean",
+            "default": false
+          },
+          {
+            "name": "retrievefailed",
+            "in": "query",
+            "description": "return only Series which failed to be retrieved from fallback C-MOVE SCP",
+            "type": "boolean",
+            "default": false
+          },
+          {
             "name": "fuzzymatching",
             "in": "query",
             "description": "fuzzy semantic matching of person names",
@@ -294,6 +408,12 @@
             "description": "limit={maximumResults}",
             "type": "integer",
             "default": 50
+          },
+          {
+            "name": "SendingApplicationEntityTitleOfSeries",
+            "in": "query",
+            "description": "return Series received from this <AE Title>",
+            "type": "string"
           }
         ],
         "responses": {
@@ -321,7 +441,7 @@
         "operationId": "SearchForSeries",
         "produces": [
           "multipart/related;type=application/dicom+xml",
-          "multipart/related;type=application/json"
+          "application/json"
         ],
         "parameters": [
           {
@@ -362,6 +482,34 @@
             "collectionFormat": "multi"
           },
           {
+            "name": "returnempty",
+            "in": "query",
+            "description": "return also empty Series",
+            "type": "boolean",
+            "default": false
+          },
+          {
+            "name": "expired",
+            "in": "query",
+            "description": "return only expired Series",
+            "type": "boolean",
+            "default": false
+          },
+          {
+            "name": "incomplete",
+            "in": "query",
+            "description": "return only Series which are marked as incomplete",
+            "type": "boolean",
+            "default": false
+          },
+          {
+            "name": "retrievefailed",
+            "in": "query",
+            "description": "return only Series which failed to be retrieved from fallback C-MOVE SCP",
+            "type": "boolean",
+            "default": false
+          },
+          {
             "name": "fuzzymatching",
             "in": "query",
             "description": "fuzzy semantic matching of person names",
@@ -381,6 +529,12 @@
             "description": "limit={maximumResults}",
             "type": "integer",
             "default": 50
+          },
+          {
+            "name": "SendingApplicationEntityTitleOfSeries",
+            "in": "query",
+            "description": "return Series received from this <AE Title>",
+            "type": "string"
           }
         ],
         "responses": {
@@ -405,10 +559,10 @@
           "QIDO-RS"
         ],
         "summary": "Search for Instances of Series of Study",
-        "operationId": "SearchForInstancesOfSeriesOfStudy",
+        "operationId": "SearchForStudySeriesInstances",
         "produces": [
           "multipart/related;type=application/dicom+xml",
-          "multipart/related;type=application/json"
+          "application/json"
         ],
         "parameters": [
           {
@@ -421,14 +575,14 @@
           {
             "name": "StudyInstanceUID",
             "in": "path",
-            "description": "study instance UID for a single study",
+            "description": "Study Instance UID for a single Study",
             "required": true,
             "type": "string"
           },
           {
             "name": "SeriesInstanceUID",
             "in": "path",
-            "description": "series instance UID for a single series",
+            "description": "Series Instance UID for a single Series",
             "required": true,
             "type": "string"
           },
@@ -506,10 +660,10 @@
           "QIDO-RS"
         ],
         "summary": "Search for Instances of Study",
-        "operationId": "SearchForInstancesOfStudy",
+        "operationId": "SearchForStudyInstances",
         "produces": [
           "multipart/related;type=application/dicom+xml",
-          "multipart/related;type=application/json"
+          "application/json"
         ],
         "parameters": [
           {
@@ -522,14 +676,14 @@
           {
             "name": "StudyInstanceUID",
             "in": "path",
-            "description": "study instance UID for a single study",
+            "description": "Study Instance UID for a single Study",
             "required": true,
             "type": "string"
           },
           {
             "name": "SeriesInstanceUID",
             "in": "path",
-            "description": "series instance UID for a single series",
+            "description": "Series Instance UID for a single Series",
             "required": true,
             "type": "string"
           },
@@ -610,7 +764,7 @@
         "operationId": "SearchForInstances",
         "produces": [
           "multipart/related;type=application/dicom+xml",
-          "multipart/related;type=application/json"
+          "application/json"
         ],
         "parameters": [
           {
@@ -623,14 +777,14 @@
           {
             "name": "StudyInstanceUID",
             "in": "path",
-            "description": "study instance UID for a single study",
+            "description": "Study Instance UID for a single Study",
             "required": true,
             "type": "string"
           },
           {
             "name": "SeriesInstanceUID",
             "in": "path",
-            "description": "series instance UID for a single series",
+            "description": "Series Instance UID for a single Series",
             "required": true,
             "type": "string"
           },
@@ -733,7 +887,7 @@
           {
             "name": "StudyInstanceUID",
             "in": "path",
-            "description": "study instance UID for a single study",
+            "description": "Study Instance UID for a single Study",
             "required": true,
             "type": "string"
           }
@@ -747,6 +901,52 @@
           },
           "404": {
             "description": "no study with specified UID found"
+          },
+          "default": {
+            "description": "unexpected error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "STOW-RS"
+        ],
+        "summary": "Store Instances of Study",
+        "operationId": "StoreInstancesOfStudy",
+        "consumes": [
+          "multipart/related;type=application/dicom;boundary={messageBoundary}",
+          "multipart/related;type=application/dicom+xml;boundary={messageBoundary}",
+          "multipart/related;type=application/json;boundary={messageBoundary}"
+        ],
+        "produces": [
+          "multipart/related;type=application/dicom+xml",
+          "multipart/related;type=application/json"
+        ],
+        "parameters": [
+          {
+            "name": "aet",
+            "in": "path",
+            "description": "Archive AE Title",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "StudyInstanceUID",
+            "in": "path",
+            "description": "Study Instance UID for a single Study",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "object",
+            "schema": {
+              "type": "file"
+            }
+          },
+          "404": {
+            "description": "object not found"
           },
           "default": {
             "description": "unexpected error"
@@ -785,14 +985,14 @@
           {
             "name": "StudyInstanceUID",
             "in": "path",
-            "description": "study instance UID for a single study",
+            "description": "Study Instance UID for a single Study",
             "required": true,
             "type": "string"
           },
           {
             "name": "SeriesInstanceUID",
             "in": "path",
-            "description": "series instance UID for a single series",
+            "description": "Series Instance UID for a single Series",
             "required": true,
             "type": "string"
           }
@@ -805,7 +1005,7 @@
             }
           },
           "404": {
-            "description": "no series with specified UIDs found"
+            "description": "no Study with specified UID found"
           },
           "default": {
             "description": "unexpected error"
@@ -844,14 +1044,14 @@
           {
             "name": "StudyInstanceUID",
             "in": "path",
-            "description": "study instance UID for a single study",
+            "description": "Study Instance UID for a single Study",
             "required": true,
             "type": "string"
           },
           {
             "name": "SeriesInstanceUID",
             "in": "path",
-            "description": "series instance UID for a single series",
+            "description": "Series Instance UID for a single Series",
             "required": true,
             "type": "string"
           },
@@ -905,14 +1105,14 @@
           {
             "name": "StudyInstanceUID",
             "in": "path",
-            "description": "study instance UID for a single study",
+            "description": "Study Instance UID for a single Study",
             "required": true,
             "type": "string"
           },
           {
             "name": "SeriesInstanceUID",
             "in": "path",
-            "description": "series instance UID for a single series",
+            "description": "Series Instance UID for a single Series",
             "required": true,
             "type": "string"
           },
@@ -976,7 +1176,7 @@
           {
             "name": "StudyInstanceUID",
             "in": "path",
-            "description": "study instance UID for a single study",
+            "description": "Study Instance UID for a single Study",
             "required": true,
             "type": "string"
           },
@@ -1085,14 +1285,14 @@
           {
             "name": "StudyInstanceUID",
             "in": "path",
-            "description": "study instance UID for a single study",
+            "description": "Study Instance UID for a single Study",
             "required": true,
             "type": "string"
           },
           {
             "name": "SeriesInstanceUID",
             "in": "path",
-            "description": "series instance UID for a single series",
+            "description": "Series Instance UID for a single Series",
             "required": true,
             "type": "string"
           },
@@ -1201,14 +1401,14 @@
           {
             "name": "StudyInstanceUID",
             "in": "path",
-            "description": "study instance UID for a single study",
+            "description": "Study Instance UID for a single Study",
             "required": true,
             "type": "string"
           },
           {
             "name": "SeriesInstanceUID",
             "in": "path",
-            "description": "series instance UID for a single series",
+            "description": "Series Instance UID for a single Series",
             "required": true,
             "type": "string"
           },
@@ -1320,14 +1520,14 @@
           {
             "name": "StudyInstanceUID",
             "in": "path",
-            "description": "study instance UID for a single study",
+            "description": "Study Instance UID for a single Study",
             "required": true,
             "type": "string"
           },
           {
             "name": "SeriesInstanceUID",
             "in": "path",
-            "description": "series instance UID for a single series",
+            "description": "Series Instance UID for a single Series",
             "required": true,
             "type": "string"
           },
@@ -1444,14 +1644,14 @@
           {
             "name": "StudyInstanceUID",
             "in": "path",
-            "description": "study instance UID for a single study",
+            "description": "Study Instance UID for a single Study",
             "required": true,
             "type": "string"
           },
           {
             "name": "SeriesInstanceUID",
             "in": "path",
-            "description": "series instance UID for a single series",
+            "description": "Series Instance UID for a single Series",
             "required": true,
             "type": "string"
           },
@@ -1494,8 +1694,8 @@
         "summary": "Retrieve Study Metadata",
         "operationId": "RetrieveStudyMetadata",
         "produces": [
-          "application/dicom+xml",
-          "multipart/related;type=application/json"
+          "multipart/related;type=application/dicom+xml",
+          "application/json"
         ],
         "parameters": [
           {
@@ -1508,8 +1708,14 @@
           {
             "name": "StudyInstanceUID",
             "in": "path",
-            "description": "study instance UID for a single study",
+            "description": "Study Instance UID for a single Study",
             "required": true,
+            "type": "string"
+          },
+          {
+            "name": "includefields",
+            "in": "query",
+            "description": "only include attributes configured by named Metadata Filter",
             "type": "string"
           }
         ],
@@ -1521,7 +1727,7 @@
             }
           },
           "404": {
-            "description": "no series with specified UIDs found"
+            "description": "no Study with specified UID found"
           },
           "default": {
             "description": "unexpected error"
@@ -1538,7 +1744,7 @@
         "operationId": "RetrieveSeriesMetadata",
         "produces": [
           "multipart/related;type=application/dicom+xml",
-          "multipart/related;type=application/json"
+          "application/json"
         ],
         "parameters": [
           {
@@ -1551,15 +1757,21 @@
           {
             "name": "StudyInstanceUID",
             "in": "path",
-            "description": "study instance UID for a single study",
+            "description": "Study Instance UID for a single Study",
             "required": true,
             "type": "string"
           },
           {
             "name": "SeriesInstanceUID",
             "in": "path",
-            "description": "series instance UID for a single series",
+            "description": "Series Instance UID for a single Series",
             "required": true,
+            "type": "string"
+          },
+          {
+            "name": "includefields",
+            "in": "query",
+            "description": "only include attributes configured by named Metadata Filter",
             "type": "string"
           }
         ],
@@ -1587,8 +1799,8 @@
         "summary": "Retrieve Instance Metadata",
         "operationId": "RetrieveInstanceMetadata",
         "produces": [
-          "application/dicom+xml",
-          "multipart/related;type=application/json"
+          "multipart/related;type=application/dicom+xml",
+          "application/json"
         ],
         "parameters": [
           {
@@ -1601,14 +1813,14 @@
           {
             "name": "StudyInstanceUID",
             "in": "path",
-            "description": "study instance UID for a single study",
+            "description": "Study Instance UID for a single Study",
             "required": true,
             "type": "string"
           },
           {
             "name": "SeriesInstanceUID",
             "in": "path",
-            "description": "series instance UID for a single series",
+            "description": "Series Instance UID for a single Series",
             "required": true,
             "type": "string"
           },
@@ -1617,6 +1829,12 @@
             "in": "path",
             "description": "SOP Instance UID for a single SOP Instance",
             "required": true,
+            "type": "string"
+          },
+          {
+            "name": "includefields",
+            "in": "query",
+            "description": "only include attributes configured by named Metadata Filter",
             "type": "string"
           }
         ],
@@ -1684,14 +1902,12 @@
             "name": "seriesUID",
             "in": "query",
             "description": "Unique Identifier of the Series",
-            "required": true,
             "type": "string"
           },
           {
             "name": "objectUID",
             "in": "query",
             "description": "Unique Identifier of the Object",
-            "required": true,
             "type": "string"
           },
           {
@@ -1785,47 +2001,6 @@
             "name": "transferSyntax",
             "in": "query",
             "description": "Transfer Syntax UID",
-            "type": "string"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "object",
-            "schema": {
-              "type": "file"
-            }
-          },
-          "404": {
-            "description": "object not found"
-          },
-          "default": {
-            "description": "unexpected error"
-          }
-        }
-      }
-    },
-    "/aets/{aet}/rs/studies/": {
-      "put": {
-        "tags": [
-          "STOW-RS"
-        ],
-        "summary": "Store Instances",
-        "operationId": "Store Instances",
-        "consumes": [
-          "multipart/related;type=application/dicom;boundary={messageBoundary}",
-          "multipart/related;type=application/dicom+xml;boundary={messageBoundary}",
-          "multipart/related;type=application/json;boundary={messageBoundary}"
-        ],
-        "produces": [
-          "multipart/related;type=application/dicom+xml",
-          "multipart/related;type=application/json"
-        ],
-        "parameters": [
-          {
-            "name": "aet",
-            "in": "path",
-            "description": "Archive AE Title",
-            "required": true,
             "type": "string"
           }
         ],

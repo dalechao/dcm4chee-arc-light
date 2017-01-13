@@ -45,6 +45,7 @@ import org.dcm4che3.data.*;
 import org.dcm4che3.net.*;
 import org.dcm4che3.net.pdu.AAssociateRQ;
 import org.dcm4che3.net.pdu.PresentationContext;
+import org.dcm4chee.arc.Cache;
 import org.dcm4chee.arc.conf.ArchiveDeviceExtension;
 import org.dcm4chee.arc.conf.Entity;
 import org.dcm4chee.arc.query.scu.CFindSCU;
@@ -68,10 +69,10 @@ public class CFindSCUImpl implements CFindSCU {
     private IApplicationEntityCache aeCache;
 
     @Override
-    public Attributes queryStudy(ApplicationEntity localAE, String callingAET, String calledAET, String studyIUID)
+    public Attributes queryStudy(ApplicationEntity localAE, String calledAET, String studyIUID)
             throws Exception {
         ApplicationEntity remoteAE = aeCache.get(calledAET);
-        Association as = localAE.connect(remoteAE, createAARQ(callingAET));
+        Association as = localAE.connect(remoteAE, createAARQ());
         try {
             DimseRSP rsp = as.cfind(UID.StudyRootQueryRetrieveInformationModelFIND, Priority.NORMAL,
                     mkQueryStudyKeys(studyIUID), UID.ImplicitVRLittleEndian, 0);
@@ -83,6 +84,24 @@ public class CFindSCUImpl implements CFindSCU {
         }
     }
 
+    @Override
+    public Attributes queryStudy(
+            ApplicationEntity localAE, String calledAET, String studyIUID, Cache<String, Attributes> cache) {
+        Cache.Entry<Attributes> entry = cache.getEntry(studyIUID);
+        Attributes newAttrs;
+        if (entry != null) {
+            newAttrs = entry.value();
+        } else {
+            try {
+                newAttrs = queryStudy(localAE, calledAET, studyIUID);
+            } catch (Exception e) {
+                newAttrs = null;
+            }
+            cache.put(studyIUID, newAttrs);
+        }
+        return newAttrs;
+    }
+
     private Attributes mkQueryStudyKeys(String studyIUID) {
         ArchiveDeviceExtension arcdev = device.getDeviceExtension(ArchiveDeviceExtension.class);
         int[] patTags = arcdev.getAttributeFilter(Entity.Patient).getSelection();
@@ -92,6 +111,7 @@ public class CFindSCUImpl implements CFindSCU {
         setReturnKeys(keys, patTags);
         setReturnKeys(keys, studyTags);
         keys.setString(Tag.StudyInstanceUID, VR.UI, studyIUID);
+        keys.setNull(Tag.NumberOfStudyRelatedInstances, VR.IS);
         return keys;
     }
 
@@ -101,9 +121,8 @@ public class CFindSCUImpl implements CFindSCU {
                 keys.setNull(tag, DICT.vrOf(tag));
     }
 
-    private AAssociateRQ createAARQ(String callingAET) {
+    private AAssociateRQ createAARQ() {
         AAssociateRQ aarq = new AAssociateRQ();
-        aarq.setCallingAET(callingAET);
         aarq.addPresentationContext(new PresentationContext(
                 1, UID.StudyRootQueryRetrieveInformationModelFIND, UID.ImplicitVRLittleEndian));
         return aarq;

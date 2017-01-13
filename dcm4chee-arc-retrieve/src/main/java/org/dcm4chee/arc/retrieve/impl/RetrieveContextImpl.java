@@ -46,28 +46,33 @@ import org.dcm4che3.net.Association;
 import org.dcm4che3.net.Priority;
 import org.dcm4che3.net.Status;
 import org.dcm4che3.net.service.QueryRetrieveLevel2;
+import org.dcm4che3.util.SafeClose;
 import org.dcm4che3.util.StringUtils;
 import org.dcm4chee.arc.conf.ArchiveAEExtension;
+import org.dcm4chee.arc.conf.MetadataFilter;
 import org.dcm4chee.arc.conf.QueryRetrieveView;
 import org.dcm4chee.arc.entity.CodeEntity;
+import org.dcm4chee.arc.entity.Location;
+import org.dcm4chee.arc.entity.Series;
 import org.dcm4chee.arc.retrieve.*;
 import org.dcm4chee.arc.storage.Storage;
 
 import javax.servlet.http.HttpServletRequest;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
+import java.util.*;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
+ * @author Vrinda Nayak <vrinda.nayak@j4care.com>
  * @since Aug 2015
  */
 class RetrieveContextImpl implements RetrieveContext {
     private Association requestAssociation;
     private Association storeAssociation;
+    private Association forwardAssociation;
+    private Association fallbackAssociation;
     private HttpServletRequest httpRequest;
     private final RetrieveService retrieveService;
     private final ArchiveAEExtension arcAE;
@@ -83,43 +88,38 @@ class RetrieveContextImpl implements RetrieveContext {
     private IDWithIssuer[] patientIDs = {};
     private String[] studyInstanceUIDs = {};
     private String[] seriesInstanceUIDs = {};
+    private Series.MetadataUpdate metadataUpdate;
     private String[] sopInstanceUIDs = {};
+    private Location.ObjectType objectType = Location.ObjectType.DICOM_FILE;
     private int numberOfMatches;
-    private final Collection<InstanceLocations> matches = new ArrayList<>();
-    private final Collection<StudyInfo> studyInfos = new ArrayList<>();
-    private final Collection<SeriesInfo> seriesInfos = new ArrayList<>();
+    private final List<InstanceLocations> matches = new ArrayList<>();
+    private final List<StudyInfo> studyInfos = new ArrayList<>();
+    private final List<SeriesInfo> seriesInfos = new ArrayList<>();
     private final AtomicInteger completed = new AtomicInteger();
     private final AtomicInteger warning = new AtomicInteger();
+    private final AtomicInteger failed = new AtomicInteger();
     private final AtomicInteger pendingCStoreForward = new AtomicInteger();
+    private final Collection<InstanceLocations> cstoreForwards =
+            Collections.synchronizedCollection(new ArrayList<InstanceLocations>());
     private final Collection<String> failedSOPInstanceUIDs =
             Collections.synchronizedCollection(new ArrayList<String>());
     private final HashMap<String, Storage> storageMap = new HashMap<>();
     private CodeEntity[] showInstancesRejectedByCode = {};
     private CodeEntity[] hideRejectionNotesWithCode = {};
+    private ScheduledFuture<?> writePendingRSP;
+    private volatile int fallbackMoveRSPNumberOfMatches;
+    private volatile int fallbackMoveRSPFailed;
+    private volatile String[] fallbackMoveRSPFailedIUIDs = {};
+    private Date patientUpdatedTime;
+    private boolean retryFailedRetrieve;
+    private MetadataFilter metadataFilter;
 
-
-    RetrieveContextImpl(RetrieveService retrieveService, ArchiveAEExtension arcAE, String localAETitle) {
+    RetrieveContextImpl(RetrieveService retrieveService, ArchiveAEExtension arcAE, String localAETitle,
+                        QueryRetrieveView qrView) {
         this.retrieveService = retrieveService;
         this.arcAE = arcAE;
         this.localAETitle = localAETitle;
-        this.qrView = arcAE.getQueryRetrieveView();
-    }
-
-    RetrieveContextImpl(RetrieveContext other) {
-        this(other.getRetrieveService(), other.getArchiveAEExtension(), other.getLocalAETitle());
-        requestAssociation = other.getRequestAssociation();
-        storeAssociation = other.getStoreAssociation();
-        httpRequest = other.getHttpRequest();
-        qrLevel = other.getQueryRetrieveLevel();
-        priority = other.getPriority();
-        moveOriginatorMessageID = other.getMoveOriginatorMessageID();
-        moveOriginatorAETitle = other.getMoveOriginatorAETitle();
-        destinationAETitle = other.getDestinationAETitle();
-        destinationAE = other.getDestinationAE();
-        patientIDs = other.getPatientIDs();
-        studyInstanceUIDs = other.getStudyInstanceUIDs();
-        seriesInstanceUIDs = other.getSeriesInstanceUIDs();
-        sopInstanceUIDs = other.getSopInstanceUIDs();
+        this.qrView = qrView;
     }
 
     @Override
@@ -150,6 +150,26 @@ class RetrieveContextImpl implements RetrieveContext {
     @Override
     public void setStoreAssociation(Association storeAssociation) {
         this.storeAssociation = storeAssociation;
+    }
+
+    @Override
+    public Association getForwardAssociation() {
+        return forwardAssociation;
+    }
+
+    @Override
+    public void setForwardAssociation(Association forwardAssociation) {
+        this.forwardAssociation = forwardAssociation;
+    }
+
+    @Override
+    public Association getFallbackAssociation() {
+        return fallbackAssociation;
+    }
+
+    @Override
+    public void setFallbackAssociation(Association fallbackAssociation) {
+        this.fallbackAssociation = fallbackAssociation;
     }
 
     @Override
@@ -332,6 +352,15 @@ class RetrieveContextImpl implements RetrieveContext {
         this.seriesInstanceUIDs = seriesInstanceUIDs != null ? seriesInstanceUIDs : StringUtils.EMPTY_STRING;
     }
 
+    public Series.MetadataUpdate getSeriesMetadataUpdate() {
+        return metadataUpdate;
+    }
+
+    @Override
+    public void setSeriesMetadataUpdate(Series.MetadataUpdate metadataUpdate) {
+        this.metadataUpdate = metadataUpdate;
+    }
+
     @Override
     public String[] getSopInstanceUIDs() {
         return sopInstanceUIDs;
@@ -343,17 +372,27 @@ class RetrieveContextImpl implements RetrieveContext {
     }
 
     @Override
-    public Collection<InstanceLocations> getMatches() {
+    public Location.ObjectType getObjectType() {
+        return objectType;
+    }
+
+    @Override
+    public void setObjectType(Location.ObjectType objectType) {
+        this.objectType = objectType;
+    }
+
+    @Override
+    public List<InstanceLocations> getMatches() {
         return matches;
     }
 
     @Override
-    public Collection<StudyInfo> getStudyInfos() {
+    public List<StudyInfo> getStudyInfos() {
         return studyInfos;
     }
 
     @Override
-    public Collection<SeriesInfo> getSeriesInfos() {
+    public List<SeriesInfo> getSeriesInfos() {
         return seriesInfos;
     }
 
@@ -368,18 +407,18 @@ class RetrieveContextImpl implements RetrieveContext {
     }
 
     @Override
-    public void incrementNumberOfMatches(int inc) {
-        numberOfMatches += inc;
-    }
-
-    @Override
     public int completed() {
         return completed.get();
     }
 
     @Override
     public void incrementCompleted() {
-        completed.incrementAndGet();
+        completed.getAndIncrement();
+    }
+
+    @Override
+    public void addCompleted(int delta) {
+        completed.getAndAdd(delta);
     }
 
     @Override
@@ -389,12 +428,27 @@ class RetrieveContextImpl implements RetrieveContext {
 
     @Override
     public void incrementWarning() {
-        warning.incrementAndGet();
+        warning.getAndIncrement();
+    }
+
+    @Override
+    public void addWarning(int delta) {
+        warning.getAndAdd(delta);
     }
 
     @Override
     public int failed() {
-        return failedSOPInstanceUIDs.size();
+        return failed.get() + fallbackMoveRSPFailed;
+    }
+
+    @Override
+    public void incrementFailed() {
+        failed.getAndIncrement();
+    }
+
+    @Override
+    public void addFailed(int delta) {
+        failed.getAndAdd(delta);
     }
 
     @Override
@@ -409,7 +463,8 @@ class RetrieveContextImpl implements RetrieveContext {
 
     @Override
     public int remaining() {
-        return numberOfMatches - completed() - warning() - failed();
+         return Math.max(0,
+                 Math.max(numberOfMatches, fallbackMoveRSPNumberOfMatches) - completed() - warning() - failed());
     }
 
     @Override
@@ -465,13 +520,13 @@ class RetrieveContextImpl implements RetrieveContext {
 
     @Override
     public void incrementPendingCStoreForward() {
-        pendingCStoreForward.incrementAndGet();
+        pendingCStoreForward.getAndIncrement();
     }
 
     @Override
     public void decrementPendingCStoreForward() {
         synchronized (pendingCStoreForward) {
-            pendingCStoreForward.decrementAndGet();
+            pendingCStoreForward.getAndDecrement();
             pendingCStoreForward.notifyAll();
         }
     }
@@ -485,8 +540,104 @@ class RetrieveContextImpl implements RetrieveContext {
     }
 
     @Override
+    public void addCStoreForward(InstanceLocations inst) {
+        cstoreForwards.add(inst);
+    }
+
+    @Override
+    public Collection<InstanceLocations> getCStoreForwards() {
+        return cstoreForwards;
+    }
+
+    @Override
+    public void setWritePendingRSP(ScheduledFuture<?> writePendingRSP) {
+        this.writePendingRSP = writePendingRSP;
+    }
+
+    @Override
+    public void stopWritePendingRSP() {
+        if (writePendingRSP != null)
+            writePendingRSP.cancel(true);
+    }
+
+    @Override
+    public int getFallbackMoveRSPNumberOfMatches() {
+        return fallbackMoveRSPNumberOfMatches;
+    }
+
+    @Override
+    public void setFallbackMoveRSPNumberOfMatches(int fallbackMoveRSPNumberOfMatches) {
+        this.fallbackMoveRSPNumberOfMatches = fallbackMoveRSPNumberOfMatches;
+    }
+
+    @Override
+    public int getFallbackMoveRSPFailed() {
+        return fallbackMoveRSPFailed;
+    }
+
+    @Override
+    public void setFallbackMoveRSPFailed(int fallbackMoveRSPFailed) {
+        this.fallbackMoveRSPFailed = fallbackMoveRSPFailed;
+    }
+
+    @Override
+    public String[] getFallbackMoveRSPFailedIUIDs() {
+        return fallbackMoveRSPFailedIUIDs;
+    }
+
+    @Override
+    public void setFallbackMoveRSPFailedIUIDs(String[] fallbackMoveRSPFailedIUIDs) {
+        this.fallbackMoveRSPFailedIUIDs = fallbackMoveRSPFailedIUIDs;
+    }
+
+    @Override
     public void close() throws IOException {
         for (Storage storage : storageMap.values())
-            storage.close();
+            SafeClose.close(storage);
+    }
+
+    @Override
+    public boolean isRetryFailedRetrieve() {
+        return retryFailedRetrieve;
+    }
+
+    @Override
+    public void setRetryFailedRetrieve(boolean retryFailedRetrieve) {
+        this.retryFailedRetrieve = retryFailedRetrieve;
+    }
+
+    @Override
+    public Date getPatientUpdatedTime() { return patientUpdatedTime; }
+
+    @Override
+    public void setPatientUpdatedTime(Date patientUpdatedTime) {
+        this.patientUpdatedTime = patientUpdatedTime;
+    }
+
+    @Override
+    public MetadataFilter getMetadataFilter() {
+        return metadataFilter;
+    }
+
+    @Override
+    public void setMetadataFilter(MetadataFilter metadataFilter) {
+        this.metadataFilter = metadataFilter;
+    }
+
+    @Override
+    public boolean isUpdateSeriesMetadata() {
+        return metadataUpdate != null;
+    }
+
+    @Override
+    public boolean isConsiderPurgedInstances() {
+        return arcAE != null
+                && arcAE.getArchiveDeviceExtension().getPurgeInstanceRecordsPollingInterval() != null
+                && (qrLevel != QueryRetrieveLevel2.IMAGE || seriesInstanceUIDs.length != 0);
+    }
+
+    @Override
+    public boolean isRetrieveMetadata() {
+        return objectType == null;
     }
 }

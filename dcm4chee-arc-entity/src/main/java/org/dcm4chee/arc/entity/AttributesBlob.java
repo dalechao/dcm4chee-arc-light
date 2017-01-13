@@ -78,7 +78,7 @@ public class AttributesBlob {
 
     @Override
     public String toString() {
-        return "BLOB[pk=" + pk + "]";
+        return "AttributesBlob[pk=" + pk + "]";
     }
 
     public long getPk() {
@@ -92,7 +92,9 @@ public class AttributesBlob {
     }
 
     public void setAttributes(Attributes attrs) {
-        encodedAttributes = AttributesBlob.encodeAttributes(cachedAttributes = attrs);
+        cachedAttributes = new Attributes(attrs);
+        cachedAttributes.removeAllBulkData();
+        encodedAttributes = AttributesBlob.encodeAttributes(cachedAttributes);
     }
 
     public byte[] getEncodedAttributes() {

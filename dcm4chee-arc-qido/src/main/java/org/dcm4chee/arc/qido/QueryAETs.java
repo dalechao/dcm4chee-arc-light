@@ -44,12 +44,15 @@ import org.dcm4che3.net.ApplicationEntity;
 import org.dcm4che3.net.Device;
 import org.dcm4chee.arc.conf.ArchiveAEExtension;
 import org.dcm4chee.arc.conf.QueryRetrieveView;
+import org.jboss.resteasy.annotations.cache.NoCache;
 
 import javax.enterprise.context.RequestScoped;
 import javax.inject.Inject;
+import javax.servlet.http.HttpServletRequest;
 import javax.ws.rs.GET;
 import javax.ws.rs.Path;
 import javax.ws.rs.Produces;
+import javax.ws.rs.core.Context;
 import javax.ws.rs.core.StreamingOutput;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -58,6 +61,7 @@ import java.io.Writer;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
+ * @author Vrinda Nayak <vrinda.nayak@j4care.com>
  * @since Oct 2015
  */
 @Path("aets")
@@ -67,7 +71,13 @@ public class QueryAETs {
     @Inject
     private Device device;
 
+    @Context
+    private HttpServletRequest request;
+
+    private final String keycloakClassName = "org.keycloak.KeycloakSecurityContext";
+
     @GET
+    @NoCache
     @Produces("application/json")
     public StreamingOutput query() throws Exception {
         return new StreamingOutput() {
@@ -94,6 +104,16 @@ public class QueryAETs {
                     if (ae.getAEExtension(ArchiveAEExtension.class)
                             .getQueryRetrieveView().isHideNotRejectedInstances())
                         w.write(",\"dcmHideNotRejectedInstances\":true");
+                    String[] acceptedUserRoles = ae.getAEExtension(ArchiveAEExtension.class).getAcceptedUserRoles();
+                    if (acceptedUserRoles.length != 0) {
+                        w.write(",\"dcmAcceptedUserRole\":[\"");
+                        for (int i = 0; i < acceptedUserRoles.length; i++) {
+                            if (i > 0)
+                                w.write("\",\"");
+                            w.write(acceptedUserRoles[i]);
+                        }
+                        w.write("\"]");
+                    }
                     w.write('}');
                 }
                 w.write(']');

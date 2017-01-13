@@ -1,14 +1,19 @@
 package org.dcm4chee.arc.store;
 
 import org.dcm4che3.data.Attributes;
-import org.dcm4che3.net.service.DicomServiceException;
+import org.dcm4chee.arc.conf.Availability;
 import org.dcm4chee.arc.conf.RejectionNote;
 import org.dcm4chee.arc.entity.Instance;
 import org.dcm4chee.arc.entity.Location;
 import org.dcm4chee.arc.storage.WriteContext;
 
+import java.time.LocalDate;
+import java.util.Collection;
+import java.util.List;
+
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
+ * @author Vrinda Nayak <vrinda.nayak@j4care.com>
  * @since Jul 2015
  */
 public interface StoreContext {
@@ -49,19 +54,17 @@ public interface StoreContext {
 
     void setAttributes(Attributes dataset);
 
+    Collection<WriteContext> getWriteContexts();
+
     Attributes getCoercedAttributes();
 
     String getStudyInstanceUID();
 
     String getSeriesInstanceUID();
 
-    WriteContext getWriteContext();
+    WriteContext getWriteContext(Location.ObjectType objectType);
 
-    void setWriteContext(WriteContext writeContext);
-
-    Location getLocation();
-
-    void setLocation(Location location);
+    void setWriteContext(Location.ObjectType objectType, WriteContext writeCtx);
 
     RejectionNote getRejectionNote();
 
@@ -74,4 +77,26 @@ public interface StoreContext {
     Instance getPreviousInstance();
 
     void setPreviousInstance(Instance previousInstance);
+
+    Instance getStoredInstance();
+
+    void setStoredInstance(Instance storedInstance);
+
+    List<Location> getLocations();
+
+    String[] getRetrieveAETs();
+
+    void setRetrieveAETs(String... retrieveAETs);
+
+    Availability getAvailability();
+
+    void setAvailability(Availability availability);
+
+    LocalDate getExpirationDate();
+
+    void setExpirationDate(LocalDate expirationDate);
+
+    boolean isPreviousDifferentStudy();
+
+    boolean isPreviousDifferentSeries();
 }

@@ -58,11 +58,7 @@ import org.slf4j.LoggerFactory;
 
 import javax.enterprise.event.Event;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Set;
-import java.util.concurrent.ScheduledFuture;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -89,7 +85,6 @@ final class RetrieveTaskImpl implements RetrieveTask {
     private final Collection<InstanceLocations> outstandingRSP =
             Collections.synchronizedCollection(new ArrayList<InstanceLocations>());
     private volatile boolean canceled;
-    private ScheduledFuture<?> writePendingRSP;
 
     RetrieveTaskImpl(RetrieveContext ctx, Association storeas,
                      Event<RetrieveContext> retrieveStart, Event<RetrieveContext> retrieveEnd) {
@@ -123,20 +118,24 @@ final class RetrieveTaskImpl implements RetrieveTask {
             rqas.addCancelRQHandler(msgId, this);
         }
         try {
-            startWritePendingRSP();
+            if (ctx.getFallbackAssociation() == null)
+                startWritePendingRSP();
             for (InstanceLocations match : ctx.getMatches()) {
                 if (canceled)
                     break;
                 store(match);
             }
             waitForOutstandingCStoreRSP();
-            if (rqas != null)
-                writeFinalRSP();
         } finally {
             releaseStoreAssociation();
-            stopWritePendingRSP();
-            if (rqas != null)
+            waitForPendingCMoveForward();
+            waitForPendingCStoreForward();
+            updateFailedSOPInstanceUIDList();
+            ctx.stopWritePendingRSP();
+            if (rqas != null) {
+                writeFinalRSP();
                 rqas.removeCancelRQHandler(msgId);
+            }
             SafeClose.close(ctx);
         }
         retrieveEnd.fire(ctx);
@@ -169,23 +168,38 @@ final class RetrieveTaskImpl implements RetrieveTask {
             }
         } catch (Exception e) {
             outstandingRSP.remove(inst);
+            ctx.incrementFailed();
             ctx.addFailedSOPInstanceUID(iuid);
             LOG.info("{}: failed to send {} to {}:", rqas, inst, ctx.getDestinationAETitle(), e);
         }
     }
 
     private void writeFinalRSP() {
-        int remaining = ctx.remaining();
-        writeRSP(remaining > 0 ? Status.Cancel : ctx.status(), remaining, finalRSPDataset());
+        ctx.addFailed(ctx.remaining());
+        writeRSP(ctx.status(), 0, finalRSPDataset());
     }
 
     private Attributes finalRSPDataset() {
         if (ctx.failed() == 0)
             return null;
 
+        String[] failedIUIDs = cat(ctx.failedSOPInstanceUIDs(), ctx.getFallbackMoveRSPFailedIUIDs());
         Attributes attrs = new Attributes(1);
-        attrs.setString(Tag.FailedSOPInstanceUIDList, VR.UI, ctx.failedSOPInstanceUIDs());
+        attrs.setString(Tag.FailedSOPInstanceUIDList, VR.UI, failedIUIDs);
         return attrs;
+    }
+
+    private static String[] cat(String[] ss1, String[] ss2) {
+        if (ss1.length == 0)
+            return ss2;
+
+        if (ss2.length == 0)
+            return ss1;
+
+        String[] ss = new String[ss1.length + ss2.length];
+        System.arraycopy(ss1, 0, ss, 0, ss1.length);
+        System.arraycopy(ss2, 0, ss, ss1.length, ss2.length);
+        return ss;
     }
 
     private void writePendingRSP() {
@@ -205,7 +219,8 @@ final class RetrieveTaskImpl implements RetrieveTask {
         cmd.setInt(Tag.NumberOfFailedSuboperations, VR.US, ctx.failed());
         cmd.setInt(Tag.NumberOfWarningSuboperations, VR.US, ctx.warning());
         try {
-            rqas.writeDimseRSP(pc, cmd, data);
+            if (rqas.isReadyForDataTransfer())
+                rqas.writeDimseRSP(pc, cmd, data);
         } catch (IOException e) {
             LOG.warn("{}: Unable to send C-GET or C-MOVE RSP on association to {}",
                     rqas, rqas.getRemoteAET(), e);
@@ -216,7 +231,7 @@ final class RetrieveTaskImpl implements RetrieveTask {
         if (pendingRSP)
             writePendingRSP();
         if (pendingRSPInterval != null)
-            writePendingRSP = rqas.getApplicationEntity().getDevice()
+            ctx.setWritePendingRSP(rqas.getApplicationEntity().getDevice()
                     .scheduleAtFixedRate(
                             new Runnable() {
                                 @Override
@@ -224,12 +239,7 @@ final class RetrieveTaskImpl implements RetrieveTask {
                                     writePendingRSP();
                                 }
                             },
-                            0, pendingRSPInterval.getSeconds(), TimeUnit.SECONDS);
-    }
-
-    private void stopWritePendingRSP() {
-        if (writePendingRSP != null)
-            writePendingRSP.cancel(false);
+                            0, pendingRSPInterval.getSeconds(), TimeUnit.SECONDS));
     }
 
     private void waitForOutstandingCStoreRSP() {
@@ -239,8 +249,23 @@ final class RetrieveTaskImpl implements RetrieveTask {
                     outstandingRSP.wait();
             }
         } catch (InterruptedException e) {
-            LOG.warn("{}: failed to wait for outstanding RSP on association to {}", rqas, storeas.getRemoteAET(), e);
+            LOG.warn("{}: failed to wait for outstanding C-STORE RSP(s) on association to {}",
+                    rqas, storeas.getRemoteAET(), e);
         }
+    }
+
+    private void waitForPendingCMoveForward() {
+        ctx.getRetrieveService().waitForPendingCMoveForward(ctx);
+    }
+
+    private void waitForPendingCStoreForward() {
+        if (ctx.getFallbackAssociation() != null)
+            ctx.getRetrieveService().waitForPendingCStoreForward(ctx);
+    }
+
+    private void updateFailedSOPInstanceUIDList() {
+        if (ctx.getFallbackAssociation() != null)
+            ctx.getRetrieveService().updateFailedSOPInstanceUIDList(ctx);
     }
 
     private void removeOutstandingRSP(InstanceLocations inst) {
@@ -277,6 +302,7 @@ final class RetrieveTaskImpl implements RetrieveTask {
             else if ((storeStatus & 0xB000) == 0xB000)
                 ctx.incrementWarning();
             else {
+                ctx.incrementFailed();
                 ctx.addFailedSOPInstanceUID(inst.getSopInstanceUID());
             }
             if (pendingRSP)

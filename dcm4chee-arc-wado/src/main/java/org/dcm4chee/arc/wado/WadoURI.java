@@ -45,15 +45,11 @@ import org.dcm4che3.imageio.plugins.dcm.DicomImageReadParam;
 import org.dcm4che3.io.DicomInputStream;
 import org.dcm4che3.io.SAXTransformer;
 import org.dcm4che3.io.TemplatesCache;
-import org.dcm4che3.io.XSLTAttributesCoercion;
 import org.dcm4che3.net.ApplicationEntity;
 import org.dcm4che3.net.Device;
-import org.dcm4che3.net.Dimse;
-import org.dcm4che3.net.TransferCapability;
 import org.dcm4che3.util.StringUtils;
 import org.dcm4che3.ws.rs.MediaTypes;
 import org.dcm4chee.arc.conf.ArchiveAEExtension;
-import org.dcm4chee.arc.conf.ArchiveAttributeCoercion;
 import org.dcm4chee.arc.retrieve.InstanceLocations;
 import org.dcm4chee.arc.retrieve.RetrieveContext;
 import org.dcm4chee.arc.retrieve.RetrieveService;
@@ -81,10 +77,8 @@ import javax.xml.transform.Templates;
 import javax.xml.transform.Transformer;
 import java.awt.*;
 import java.io.IOException;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Iterator;
+import java.util.*;
+import java.util.List;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
@@ -119,6 +113,9 @@ public class WadoURI {
     @Inject @RetrieveWADO
     private Event<RetrieveContext> retrieveWado;
 
+    @Context
+    private Request req;
+
     @PathParam("AETitle")
     private String aet;
 
@@ -132,11 +129,9 @@ public class WadoURI {
     private String studyUID;
 
     @QueryParam("seriesUID")
-    @NotNull
     private String seriesUID;
 
     @QueryParam("objectUID")
-    @NotNull
     private String objectUID;
 
     @QueryParam("contentType")
@@ -206,38 +201,64 @@ public class WadoURI {
         try {
             checkAET();
             final RetrieveContext ctx = service.newRetrieveContextWADO(request, aet, studyUID, seriesUID, objectUID);
-            if (!service.calculateMatches(ctx))
-                throw new WebApplicationException(Response.Status.NOT_FOUND);
 
-            Collection<InstanceLocations> matches = ctx.getMatches();
-            if (matches.size() > 1)
-                throw new WebApplicationException(
-                        "More than one matching resource found");
-
-            InstanceLocations inst = matches.iterator().next();
-            ObjectType objectType = ObjectType.objectTypeOf(ctx, inst, frameNumber);
-            MediaType mimeType = selectMimeType(objectType);
-            if (mimeType == null)
-                throw new WebApplicationException(Response.Status.NOT_ACCEPTABLE);
-
-            StreamingOutput entity;
-            if (mimeType.isCompatible(MediaTypes.APPLICATION_DICOM_TYPE)) {
-                mimeType = MediaTypes.APPLICATION_DICOM_TYPE;
-                entity = new DicomObjectOutput(ctx, inst, tsuids());
-            } else {
-                entity = entityOf(ctx, inst, objectType, mimeType);
+            if (request.getHeader(HttpHeaders.IF_MODIFIED_SINCE) == null && request.getHeader(HttpHeaders.IF_UNMODIFIED_SINCE) == null
+                    && request.getHeader(HttpHeaders.IF_MATCH) == null && request.getHeader(HttpHeaders.IF_NONE_MATCH) == null) {
+                buildResponse(ar, ctx, null);
+                return;
             }
-            ar.register(new CompletionCallback() {
-                @Override
-                public void onComplete(Throwable throwable) {
-                    ctx.setException(throwable);
-                    retrieveWado.fire(ctx);
-                }
-            });
-            ar.resume(Response.ok(entity, mimeType).build());
+
+            Date lastModified = service.getLastModified(ctx);
+            if (lastModified == null)
+                throw new WebApplicationException(Response.Status.NOT_FOUND);
+            Response.ResponseBuilder respBuilder = evaluatePreConditions(lastModified);
+
+            if (respBuilder == null)
+                buildResponse(ar, ctx, lastModified);
+            else
+                ar.resume(respBuilder.build());
         } catch (Exception e) {
             ar.resume(e);
         }
+    }
+
+    private void buildResponse(@Suspended AsyncResponse ar, final RetrieveContext ctx, Date lastModified) throws IOException {
+        if (!service.calculateMatches(ctx))
+            throw new WebApplicationException(Response.Status.NOT_FOUND);
+
+        List<InstanceLocations> matches = ctx.getMatches();
+        int numMatches = matches.size();
+        if (numMatches > 1)
+            LOG.debug("{} matches found. Return {}. match", numMatches, numMatches >>> 1);
+        InstanceLocations inst = matches.get(numMatches >>> 1);
+
+        if (lastModified == null)
+            lastModified = service.getLastModifiedFromMatches(ctx);
+
+        ObjectType objectType = ObjectType.objectTypeOf(ctx, inst, frameNumber);
+        MediaType mimeType = selectMimeType(objectType);
+        if (mimeType == null)
+            throw new WebApplicationException(Response.Status.NOT_ACCEPTABLE);
+
+        StreamingOutput entity;
+        if (mimeType.isCompatible(MediaTypes.APPLICATION_DICOM_TYPE)) {
+            mimeType = MediaTypes.APPLICATION_DICOM_TYPE;
+            entity = new DicomObjectOutput(ctx, inst, tsuids());
+        } else {
+            entity = entityOf(ctx, inst, objectType, mimeType);
+        }
+        ar.register(new CompletionCallback() {
+            @Override
+            public void onComplete(Throwable throwable) {
+                ctx.setException(throwable);
+                retrieveWado.fire(ctx);
+            }
+        });
+        ar.resume(Response.ok(entity, mimeType).lastModified(lastModified).tag(String.valueOf(lastModified.hashCode())).build());
+    }
+
+    private Response.ResponseBuilder evaluatePreConditions(Date lastModified) {
+        return req.evaluatePreconditions(lastModified, new EntityTag(String.valueOf(lastModified.hashCode())));
     }
 
     private void checkAET() {

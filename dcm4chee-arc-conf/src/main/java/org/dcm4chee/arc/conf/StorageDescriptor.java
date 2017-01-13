@@ -9,6 +9,7 @@ import java.util.*;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
+ * @author Vrinda Nayak <vrinda.nayak@j4care.com>
  * @since Jul 2015
  */
 public final class StorageDescriptor {
@@ -16,8 +17,8 @@ public final class StorageDescriptor {
     private String storageURIStr;
     private URI storageURI;
     private String digestAlgorithm;
-    private String[] retrieveAETitles = {};
     private Availability instanceAvailability;
+    private String externalRetrieveAETitle;
     private boolean readOnly;
 
     private final ArrayList<DeleterThreshold> deleterThresholds = new ArrayList<>();
@@ -72,20 +73,20 @@ public final class StorageDescriptor {
         }
     }
 
-    public String[] getRetrieveAETitles() {
-        return retrieveAETitles;
-    }
-
-    public void setRetrieveAETitles(String... retrieveAETitles) {
-        this.retrieveAETitles = retrieveAETitles;
-    }
-
     public Availability getInstanceAvailability() {
         return instanceAvailability;
     }
 
     public void setInstanceAvailability(Availability instanceAvailability) {
         this.instanceAvailability = instanceAvailability;
+    }
+
+    public String getExternalRetrieveAETitle() {
+        return externalRetrieveAETitle;
+    }
+
+    public void setExternalRetrieveAETitle(String externalRetrieveAETitle) {
+        this.externalRetrieveAETitle = externalRetrieveAETitle;
     }
 
     public boolean isReadOnly() {
@@ -154,9 +155,9 @@ public final class StorageDescriptor {
                 "storageID=" + storageID +
                 ", storageURI=" + storageURI +
                 ", digestAlg=" + digestAlgorithm +
-                ", retrieveAETs=" + Arrays.toString(retrieveAETitles) +
                 ", availability=" + instanceAvailability +
                 ", deleterThresholds=" + deleterThresholds +
+                ", externalRetrieveAETitle=" + externalRetrieveAETitle +
                 ", readOnly=" + readOnly +
                 ", properties=" + properties +
                 '}';

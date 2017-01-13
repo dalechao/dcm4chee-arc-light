@@ -46,6 +46,8 @@ import org.dcm4chee.arc.code.CodeService;
 import org.dcm4chee.arc.entity.CodeEntity;
 
 import javax.ejb.Stateless;
+import javax.ejb.TransactionAttribute;
+import javax.ejb.TransactionAttributeType;
 import javax.persistence.EntityManager;
 import javax.persistence.NoResultException;
 import javax.persistence.PersistenceContext;
@@ -53,21 +55,23 @@ import javax.persistence.TypedQuery;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
+ * @author Vrinda Nayak <vrinda.nayak@j4care.com>
  * @since Jul 2015
  */
 @Stateless
-public class CodeServiceEJB implements CodeService {
+@TransactionAttribute(TransactionAttributeType.REQUIRES_NEW)
+public class CodeServiceEJB {
 
     @PersistenceContext(unitName="dcm4chee-arc")
     private EntityManager em;
 
-    @Override
     public CodeEntity findOrCreate(Code code) {
         try {
             return find(code);
         } catch (NoResultException e) {
             CodeEntity entity = new CodeEntity(code);
             em.persist(entity);
+            em.flush();
             return entity;
         }
     }

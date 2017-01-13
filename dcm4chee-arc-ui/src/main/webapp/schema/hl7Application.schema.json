@@ -9,7 +9,7 @@
   "properties": {
     "hl7ApplicationName": {
       "title": "HL7 Application name",
-      "description": "HL7 Application and Facility name (Application^Facility)",
+      "description": "HL7 Application and Facility name (Application|Facility)",
       "type": "string"
     },
     "dicomNetworkConnectionReference": {
@@ -22,7 +22,7 @@
     },
     "hl7AcceptedSendingApplication": {
       "title": "Accepted Sending Application",
-      "description": "Application^Facility name of accepted Sending Application(s); any if absent",
+      "description": "Application|Facility name of accepted Sending Application(s); any if absent",
       "type": "array",
       "items": {
         "type": "string"
@@ -47,6 +47,8 @@
       "type": "boolean"
     },
     "dcmArchiveHL7Application": {
+      "title": "Archive HL7 Application",
+      "description": "DICOM Archive HL7 Application related information",
       "$ref": "archiveHL7Application.schema.json"
     }
   }

@@ -58,6 +58,19 @@
     </attributes>
   </entity>
 
+  <entity class="org.dcm4chee.arc.entity.UIDMap">
+    <sequence-generator name="uidmap_pk_seq" sequence-name="uidmap_pk_seq" allocation-size="1"/>
+    <attributes>
+      <id name="pk">
+        <column name="pk"/>
+        <generated-value strategy="SEQUENCE" generator="uidmap_pk_seq"/>
+      </id>
+      <basic name="encodedMap" optional="false">
+        <column name="uidmap" column-definition="${blob}"/>
+      </basic>
+    </attributes>
+  </entity>
+
   <entity class="org.dcm4chee.arc.entity.CodeEntity">
     <sequence-generator name="code_pk_seq" sequence-name="code_pk_seq" allocation-size="1"/>
     <attributes>
@@ -98,6 +111,16 @@
     </attributes>
   </entity>
 
+  <entity class="org.dcm4chee.arc.entity.HL7PSUTask">
+    <sequence-generator name="hl7psu_task_pk_seq" sequence-name="hl7psu_task_pk_seq" allocation-size="1"/>
+    <attributes>
+      <id name="pk">
+        <column name="pk"/>
+        <generated-value strategy="SEQUENCE" generator="hl7psu_task_pk_seq"/>
+      </id>
+    </attributes>
+  </entity>
+
   <entity class="org.dcm4chee.arc.entity.Instance">
     <sequence-generator name="instance_pk_seq" sequence-name="instance_pk_seq" allocation-size="1"/>
     <attributes>
@@ -128,12 +151,32 @@
     </attributes>
   </entity>
 
+  <entity class="org.dcm4chee.arc.entity.Metadata">
+    <sequence-generator name="metadata_pk_seq" sequence-name="metadata_pk_seq" allocation-size="1"/>
+    <attributes>
+      <id name="pk">
+        <column name="pk"/>
+        <generated-value strategy="SEQUENCE" generator="metadata_pk_seq"/>
+      </id>
+    </attributes>
+  </entity>
+
   <entity class="org.dcm4chee.arc.entity.MPPS">
     <sequence-generator name="mpps_pk_seq" sequence-name="mpps_pk_seq" allocation-size="1"/>
     <attributes>
       <id name="pk">
         <column name="pk"/>
         <generated-value strategy="SEQUENCE" generator="mpps_pk_seq"/>
+      </id>
+    </attributes>
+  </entity>
+
+  <entity class="org.dcm4chee.arc.entity.MWLItem">
+    <sequence-generator name="mwl_item_pk_seq" sequence-name="mwl_item_pk_seq" allocation-size="1"/>
+    <attributes>
+      <id name="pk">
+        <column name="pk"/>
+        <generated-value strategy="SEQUENCE" generator="mwl_item_pk_seq"/>
       </id>
     </attributes>
   </entity>
@@ -271,6 +314,16 @@
       <id name="pk">
         <column name="pk"/>
         <generated-value strategy="SEQUENCE" generator="soundex_code_pk_seq"/>
+      </id>
+    </attributes>
+  </entity>
+
+  <entity class="org.dcm4chee.arc.entity.StgCmtResult">
+    <sequence-generator name="stgcmt_result_pk_seq" sequence-name="stgcmt_result_pk_seq" allocation-size="1"/>
+    <attributes>
+      <id name="pk">
+        <column name="pk"/>
+        <generated-value strategy="SEQUENCE" generator="stgcmt_result_pk_seq"/>
       </id>
     </attributes>
   </entity>

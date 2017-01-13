@@ -43,6 +43,7 @@ package org.dcm4chee.arc.query.util;
 import com.querydsl.core.BooleanBuilder;
 import com.querydsl.core.types.ExpressionUtils;
 import com.querydsl.core.types.Predicate;
+import com.querydsl.core.types.dsl.DateTimePath;
 import com.querydsl.core.types.dsl.StringPath;
 import org.dcm4che3.data.Attributes;
 import org.dcm4che3.data.DateRange;
@@ -92,22 +93,22 @@ class MatchDateTimeRange {
     static Predicate rangeMatch(StringPath dateField, StringPath timeField,
             int dateTag, int timeTag, long dateAndTimeTag,
             Attributes keys, boolean combinedDatetimeMatching) {
-        final boolean containsDateTag = keys.containsValue(dateTag);
-        final boolean containsTimeTag = keys.containsValue(timeTag);
-        if (!containsDateTag && !containsTimeTag)
+        DateRange dateRange = keys.getDateRange(dateTag, null);
+        DateRange timeRange = keys.getDateRange(timeTag, null);
+        if (dateRange == null && timeRange == null)
             return null;
 
         BooleanBuilder predicates = new BooleanBuilder();
-        if (containsDateTag && containsTimeTag && combinedDatetimeMatching) {
+        if (dateRange != null && timeRange != null && combinedDatetimeMatching) {
             predicates.and(ExpressionUtils.and(combinedRange(
                     dateField, timeField, keys.getDateRange(dateAndTimeTag, null)), dateField.ne("*")));
         } else {
-            if (containsDateTag)
-                predicates.and(ExpressionUtils.and(range(dateField, keys.getDateRange(dateTag, null), FormatDate.DA),
-                        dateField.ne("*")));
-            if (containsTimeTag)
-                predicates.and(ExpressionUtils.and(range(timeField, keys.getDateRange(timeTag, null), FormatDate.TM),
-                        timeField.ne("*")));
+            if (dateRange != null) {
+                predicates.and(ExpressionUtils.and(range(dateField, dateRange, FormatDate.DA), dateField.ne("*")));
+            }
+            if (timeRange != null) {
+                predicates.and(ExpressionUtils.and(range(timeField, timeRange, FormatDate.TM), timeField.ne("*")));
+            }
         }
         return predicates;
     }
@@ -122,21 +123,46 @@ class MatchDateTimeRange {
         return rangeInterval(field, startDate, endDate, dt, range);
     }
 
+    static Predicate range(DateTimePath field, DateRange range, FormatDate dt) {
+        Date startDate = range.getStartDate();
+        Date endDate = range.getEndDate();
+        if (startDate == null)
+            return field.loe(endDate);
+        if (endDate == null)
+            return field.goe(startDate);
+        return rangeInterval(field, startDate, endDate, dt, range);
+    }
+
     private static Predicate rangeInterval(StringPath field, Date startDate,
             Date endDate, FormatDate dt, DateRange range) {
         String start = dt.format(startDate);
         String end = dt.format(endDate);
-    	if(dt.equals(FormatDate.TM) && range.isStartDateExeedsEndDate()){
-    		String midnightLow = "115959.999";
-    		String midnightHigh = "000000.000";
-    		return ExpressionUtils.or(field.between(start, midnightLow),field.between(midnightHigh, end));
-    	}
-    	else
-    	{
-    	     return end.equals(start)
-    	             ? field.eq(start)
-    	             : field.between(start, end);
-    	}
+        if(dt.equals(FormatDate.TM) && range.isStartDateExeedsEndDate()){
+            String midnightLow = "115959.999";
+            String midnightHigh = "000000.000";
+            return ExpressionUtils.or(field.between(start, midnightLow),field.between(midnightHigh, end));
+        }
+        else
+        {
+             return end.equals(start)
+                     ? field.eq(start)
+                     : field.between(start, end);
+        }
+    }
+
+    private static Predicate rangeInterval(DateTimePath field, Date startDate,
+                                           Date endDate, FormatDate dt, DateRange range) {
+        if(dt.equals(FormatDate.TM) && range.isStartDateExeedsEndDate()){
+            String midnightLow = "115959.999";
+            String midnightHigh = "000000.000";
+            return ExpressionUtils.or(field.between(startDate, midnightLow),field.between(midnightHigh, endDate));
+        }
+        else
+        {
+            return endDate.equals(startDate)
+                    ? field.eq(startDate)
+                    : field.between(startDate, endDate);
+        }
     }
 
     private static Predicate combinedRange(StringPath dateField, StringPath timeField, DateRange dateRange) {

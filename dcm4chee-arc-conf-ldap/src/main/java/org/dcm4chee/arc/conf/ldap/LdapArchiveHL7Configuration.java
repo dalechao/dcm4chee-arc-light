@@ -40,11 +40,11 @@
 
 package org.dcm4chee.arc.conf.ldap;
 
+import org.dcm4che3.conf.api.ConfigurationException;
 import org.dcm4che3.conf.ldap.LdapUtils;
 import org.dcm4che3.conf.ldap.hl7.LdapHL7ConfigurationExtension;
 import org.dcm4che3.net.hl7.HL7Application;
 import org.dcm4chee.arc.conf.ArchiveHL7ApplicationExtension;
-
 import javax.naming.NamingException;
 import javax.naming.directory.Attributes;
 import javax.naming.directory.ModificationItem;
@@ -55,7 +55,7 @@ import java.util.List;
  * @author Vrinda Nayak <vrinda.nayak@j4care.com>
  * @since Jul 2015
  */
-public class LdapArchiveHL7Configuration implements LdapHL7ConfigurationExtension {
+public class LdapArchiveHL7Configuration extends LdapHL7ConfigurationExtension {
     @Override
     public void storeTo(HL7Application hl7App, String deviceDN, Attributes attrs) {
         ArchiveHL7ApplicationExtension ext =
@@ -66,7 +66,22 @@ public class LdapArchiveHL7Configuration implements LdapHL7ConfigurationExtensio
         attrs.get("objectclass").add("dcmArchiveHL7Application");
         LdapUtils.storeNotNull(attrs, "hl7PatientUpdateTemplateURI", ext.getPatientUpdateTemplateURI());
         LdapUtils.storeNotNull(attrs, "hl7ImportReportTemplateURI", ext.getImportReportTemplateURI());
+        LdapUtils.storeNotNull(attrs, "hl7ScheduleProcedureTemplateURI", ext.getScheduleProcedureTemplateURI());
+        LdapUtils.storeNotNull(attrs, "hl7LogFilePattern", ext.getHl7LogFilePattern());
+        LdapUtils.storeNotNull(attrs, "hl7ErrorLogFilePattern", ext.getHl7ErrorLogFilePattern());
         LdapUtils.storeNotNull(attrs, "dicomAETitle", ext.getAETitle());
+    }
+
+    @Override
+    public void storeChilds(String appDN, HL7Application hl7App) throws NamingException {
+        ArchiveHL7ApplicationExtension ext =
+                hl7App.getHL7ApplicationExtension(ArchiveHL7ApplicationExtension.class);
+        if (ext == null)
+            return;
+
+        LdapArchiveConfiguration.storeHL7ForwardRules(ext.getHL7ForwardRules(), appDN, getDicomConfiguration());
+        LdapArchiveConfiguration.storeScheduledStations(ext.getHL7OrderScheduledStations(), appDN, getDicomConfiguration());
+        LdapArchiveConfiguration.storeHL7OrderSPSStatus(ext.getHL7OrderSPSStatuses(), appDN, getDicomConfiguration());
     }
 
     @Override
@@ -79,7 +94,22 @@ public class LdapArchiveHL7Configuration implements LdapHL7ConfigurationExtensio
         hl7App.addHL7ApplicationExtension(ext);
         ext.setPatientUpdateTemplateURI(LdapUtils.stringValue(attrs.get("hl7PatientUpdateTemplateURI"), null));
         ext.setImportReportTemplateURI(LdapUtils.stringValue(attrs.get("hl7ImportReportTemplateURI"), null));
+        ext.setScheduleProcedureTemplateURI(LdapUtils.stringValue(attrs.get("hl7ScheduleProcedureTemplateURI"), null));
+        ext.setHl7LogFilePattern(LdapUtils.stringValue(attrs.get("hl7LogFilePattern"), null));
+        ext.setHl7ErrorLogFilePattern(LdapUtils.stringValue(attrs.get("hl7ErrorLogFilePattern"), null));
         ext.setAETitle(LdapUtils.stringValue(attrs.get("dicomAETitle"), null));
+    }
+
+    @Override
+    public void loadChilds(HL7Application hl7App, String appDN) throws NamingException, ConfigurationException {
+        ArchiveHL7ApplicationExtension ext =
+                hl7App.getHL7ApplicationExtension(ArchiveHL7ApplicationExtension.class);
+        if (ext == null)
+            return;
+
+        LdapArchiveConfiguration.loadHL7ForwardRules(ext.getHL7ForwardRules(), appDN, getDicomConfiguration());
+        LdapArchiveConfiguration.loadScheduledStations(ext.getHL7OrderScheduledStations(), appDN, getDicomConfiguration());
+        LdapArchiveConfiguration.loadHL7OrderSPSStatus(ext.getHL7OrderSPSStatuses(), appDN, getDicomConfiguration());
     }
 
     @Override
@@ -96,6 +126,27 @@ public class LdapArchiveHL7Configuration implements LdapHL7ConfigurationExtensio
                 aa.getPatientUpdateTemplateURI(), bb.getPatientUpdateTemplateURI());
         LdapUtils.storeDiff(mods, "hl7ImportReportTemplateURI",
                 aa.getImportReportTemplateURI(), bb.getImportReportTemplateURI());
-        LdapUtils.storeDiff(mods, "dcmOtherAETitle", aa.getAETitle(), bb.getAETitle());
+        LdapUtils.storeDiff(mods, "hl7ScheduleProcedureTemplateURI",
+                aa.getScheduleProcedureTemplateURI(),
+                bb.getScheduleProcedureTemplateURI());
+        LdapUtils.storeDiff(mods, "hl7LogFilePattern", aa.getHl7LogFilePattern(), bb.getHl7LogFilePattern());
+        LdapUtils.storeDiff(mods, "hl7ErrorLogFilePattern", aa.getHl7ErrorLogFilePattern(), bb.getHl7ErrorLogFilePattern());
+        LdapUtils.storeDiff(mods, "dicomAETitle", aa.getAETitle(), bb.getAETitle());
     }
+
+    @Override
+    public void mergeChilds(HL7Application prev, HL7Application hl7App, String appDN) throws NamingException {
+        ArchiveHL7ApplicationExtension aa = prev.getHL7ApplicationExtension(ArchiveHL7ApplicationExtension.class);
+        ArchiveHL7ApplicationExtension bb = hl7App.getHL7ApplicationExtension(ArchiveHL7ApplicationExtension.class);
+        if (aa == null || bb == null)
+            return;
+
+        LdapArchiveConfiguration.mergeHL7ForwardRules(
+                aa.getHL7ForwardRules(), bb.getHL7ForwardRules(), appDN, getDicomConfiguration());
+        LdapArchiveConfiguration.mergeScheduledStations(
+                aa.getHL7OrderScheduledStations(), bb.getHL7OrderScheduledStations(), appDN, getDicomConfiguration());
+        LdapArchiveConfiguration.mergeHL7OrderSPSStatus(
+                aa.getHL7OrderSPSStatuses(), bb.getHL7OrderSPSStatuses(), appDN, getDicomConfiguration());
+    }
+
 }

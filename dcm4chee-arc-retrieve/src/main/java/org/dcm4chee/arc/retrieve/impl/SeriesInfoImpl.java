@@ -42,8 +42,12 @@ package org.dcm4chee.arc.retrieve.impl;
 
 import org.dcm4chee.arc.retrieve.SeriesInfo;
 
+import java.util.Date;
+
+
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
+ * @author Vrinda Nayak <vrinda.nayak@j4care.com>
  * @since May 2016
  */
 public class SeriesInfoImpl implements SeriesInfo {
@@ -51,13 +55,19 @@ public class SeriesInfoImpl implements SeriesInfo {
     private final String seriesInstanceUID;
     private final int failedRetrieves;
     private final String failedSOPInstanceUIDList;
+    private final Date updatedTime;
+    private final String expirationDate;
+    private final String sourceAET;
 
     public SeriesInfoImpl(String studyInstanceUID, String seriesInstanceUID, int failedRetrieves,
-                          String failedSOPInstanceUIDList) {
+            String failedSOPInstanceUIDList, Date updatedTime, String expirationDate, String sourceAET) {
         this.studyInstanceUID = studyInstanceUID;
         this.seriesInstanceUID = seriesInstanceUID;
         this.failedRetrieves = failedRetrieves;
         this.failedSOPInstanceUIDList = failedSOPInstanceUIDList;
+        this.updatedTime = updatedTime;
+        this.expirationDate = expirationDate;
+        this.sourceAET = sourceAET;
     }
 
     @Override
@@ -78,5 +88,20 @@ public class SeriesInfoImpl implements SeriesInfo {
     @Override
     public String getFailedSOPInstanceUIDList() {
         return failedSOPInstanceUIDList;
+    }
+
+    @Override
+    public Date getUpdatedTime() {
+        return updatedTime;
+    }
+
+    @Override
+    public String getExpirationDate() {
+        return expirationDate;
+    }
+
+    @Override
+    public String getSourceAET() {
+        return sourceAET;
     }
 }

@@ -1,0 +1,1084 @@
+<!--<pre style="position: absolute;width:50%;top:0;z-index: 9999999;">-->
+
+                        <!--<button (click)="createPatient(null)">createpatient</button>-->
+                        <!--</pre>-->
+<div class="main_content studies">
+    <div *ngIf="user">
+
+    <!--  <pre style="position: absolute;width:50%;top:0;z-index: 9999999;">
+            queryMode:{{queryMode}}
+            <button (click)="fireRightQuery()">{{queryMode}}</button>
+    </pre> -->
+
+    <!-- contextmenu -->
+    <div class="dropdown contextmenu" > <!--contextmenu="meta.contextmenu"-->
+        <ul *ngIf="isRole('admin')" class="dropdown-menu" role="menu">
+            <!--     <li class="dropdown-header">
+                Test header
+                {{meta.contextmenu.item.modus}}
+                </li> -->
+            <!--<li [hidden]="meta.contextmenu.item.modus === 'patient._VALUE'" ><a role="menuitem" href="" (click)="ctrlC(meta.contextmenu.item)"><label>Copy</label><span>Ctrl + c</span></a></li>-->
+            <li><a role="menuitem" href="" (click)="ctrlV(meta.contextmenu.item)"><label>Paste</label><span>Ctrl + v</span></a></li>
+            <!--<li [hidden]="meta.contextmenu.item.modus === 'patient._VALUE'" ><a role="menuitem" href="" (click)="ctrlX(meta.contextmenu.item)"><label>Cut</label><span>Ctrl + x</span></a></li>-->
+            <li>
+                <!--       <a role="menuitem" tabindex="-1" href (click)="editTest(meta.contextmenu.item)"
+                      >
+                        <span>Edit</span>
+                      </a> -->
+            </li>
+            <!--     <li>
+                  <a role="menuitem" href
+                    (click)="delete(meta.contextmenu.item)"
+                  >
+                    <span>Delete</span>
+                  </a>
+                </li> -->
+        </ul>
+    </div>
+    <!-- /contextmenu -->
+    <div id="clipboard" class="clipboard said"  *ngIf="clipBoardNotEmpty()">
+        <div id="clipboardtoggle" class="toggle_button" (click)="showClipboardContent = !showClipboardContent">
+            <i id="clipboardtoggle_icon" class="glyphicon glyphicon-copy"></i>
+        </div>
+        <div class="content" id="clipboard_content" *ngIf="showClipboardContent">
+            <h5>Selected Objects to {{clipboard.action}}</h5>
+            <a class="clear_clipboard" title="Clear clipboard" href="" (click)="clearClipboard()">
+                Clear <span class="glyphicon glyphicon-remove"></span>
+            </a>
+            <div class="header">
+                <div>study._VALUE Instance UID
+                    <div *ngIf="showClipboardHeaders.series || showClipboardHeaders.instance">Series Instance UID
+                        <div *ngIf="showClipboardHeaders.instance">
+                            <span class="sopclass">Referenced SOP Class UID</span>
+                            <span class="sopinstance">Referenced SOP Instance UID</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="body">
+                <div class="block" *ngFor="let value of clipboard.selected; let key = index;">
+                    <div class="study_block block_part">
+                        {{value.StudyInstanceUID}}
+                        <i (click)='removeClipboardElement("study._VALUE",{"study._KEY":key})' class="remove glyphicon glyphicon-remove"></i>
+                        <div class="series_block block_part" *ngFor="let seriesequence of value.ReferencedSeriesSequence; let key2 = index;" [ngClass]="{'no-series':!seriesequence.ReferencedSOPSequence.length,'series':seriesequence.ReferencedSOPSequence.length,'scroll-active':clipboardHasScrollbar()}">
+                            {{seriesequence.SeriesInstanceUID}}
+                            <i (click)='removeClipboardElement("serie", {"study._KEY":key, "serieskey":key2})' class="remove glyphicon glyphicon-remove"></i>
+                            <div class="sop_block block_part" *ngFor="let sopseq of seriesequence.ReferencedSOPSequence; let key3 = index;">
+                                <span class="sopclass">
+                                    {{sopseq.ReferencedSOPClassUID}}
+                                </span>
+                                <span class="sopinstance">
+                                    {{sopseq.ReferencedSOPInstanceUID}}
+                                </span>
+                                <i (click)='removeClipboardElement("instance", {"study._KEY":key, "serieskey":key2, "instancekey":key3})' class="remove glyphicon glyphicon-remove"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="headerblock" [ngClass]="{modality:showModalitySelector}">
+        <div class="row filter">
+            <div class="main_filter_block">
+                <div class="col-md-3 block-1-1">
+                    <div class="row">
+                        <label for="aet" class="col-md-6 text-right control-label">AET:</label>
+                        <div class=" col-md-6">
+                            <select
+                                    id="aet"
+                                    [ngModel]="aetmodel"
+                                    class="col-md-12"
+                                    (ngModelChange)="onChange($event, 'aetmodel')"
+                            >
+                                <!--ng-change="setTrash()"-->
+                                <!--ng-options="ae.title for ae in aes"-->
+                                <option [ngValue]="ae" (click)="setTrash()" title="{{ae.description}}" *ngFor="let ae of aes" >{{ae.title}}</option>
+                            </select>
+                            <!--<p-dropdown [options]="aes" [(ngModel)]="aetmodel"></p-dropdown>-->
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <input id="PatientName" type="text" [(ngModel)]="filter.PatientName" placeholder="Patient name" title="Patient name" class="col-md-12" />
+                        </div>
+                        <div class="col-md-6">
+                            <label>
+                                <input type="checkbox" [(ngModel)]="filter.fuzzymatching"> Fuzzy Matching
+                            </label>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <input id="PatientID" type="text" [(ngModel)]="filter.PatientID" placeholder="Patient ID" title="Patient ID" class="col-md-12" />
+                        </div>
+                        <div class="col-md-6">
+                            <input autocomplete="off" id="IssuerOfPatientID" [disabled]="disabled.IssuerOfPatientID" type="text" [(ngModel)]="filter.IssuerOfPatientID" placeholder="Issuer of patient" title="Issuer of patient" class="col-md-12" (click)="conditionWarning($event, !filter.PatientID, 'Patient ID is empty, set first the patient._VALUE ID!')" ng-keypress="conditionWarning($event, !filter.PatientID, 'Patient ID is empty, set first the patient._VALUE ID!')" ng-keypress="conditionWarning($event, !filter.PatientID, 'Patient ID is empty, set first the patient._VALUE ID!')"/>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3 block-1-1">
+                    <div class="row" *ngIf="filterMode === 'mwl'||filterMode === 'study'">
+                        <div class="col-md-6">
+                            <input id="AccessionNumber" type="text" [(ngModel)]="filter.AccessionNumber" placeholder="Accession number" title="Accession number" class="col-md-12" />
+                        </div>
+                        <div class="col-md-6">
+                            <input id="LocalNamespaceEntityID" type="text" [disabled]="disabled.LocalNamespaceEntityID" [(ngModel)]="filter['IssuerOfAccessionNumberSequence.LocalNamespaceEntityID']" placeholder="Issuer of accession number" title="Issuer of accession number" class="col-md-12"  ng-keypress="conditionWarning($event, !filter.AccessionNumber, 'Accession Number is empty, set first the Accession Number!')" (click)="conditionWarning($event, !filter.AccessionNumber, 'Accession Number is empty, set first the Accession Number!')"/>
+                        </div>
+                    </div>
+                    <div class="row" *ngIf="filterMode === 'mwl'||filterMode === 'study'">
+                        <div class="col-md-6" *ngIf="filterMode === 'mwl'" >
+                            <input id="ScheduledStationAETitle" type="text" [(ngModel)]="filter['ScheduledProcedureStepSequence.ScheduledStationAETitle']" placeholder="Scheduled Station AE Title" title="Scheduled Station AE Title" class="col-md-12 clearable" />
+                        </div>
+                        <div class="col-md-6" *ngIf="filterMode === 'study'">
+                            <input id="ReferringPhysicianName" type="text" [(ngModel)]="filter.ReferringPhysicianName" placeholder="Referring physician name" title="Referring physician name" class="col-md-12" />
+                        </div>
+                        <div class="col-md-6" *ngIf="filterMode === 'study'">
+                            <input id="Modality" type="text" size="5"  [(ngModel)]="filter.ModalitiesInStudy" (click)="showModalitySelector = !showModalitySelector" placeholder=" Modality"  class="col-md-12" ng-keypress="checkKeyModality($event)"/>
+                            <div class="modality_selector [hidden]" *ngIf="showModalitySelector">
+                                <a href="" (click)="showModalitySelector=false" class="close"><i class="glyphicon glyphicon-remove"></i></a>
+                                <div class="common">
+                                    <a href="" *ngFor="let value of modalities.common | getKey;" (click)="$event.preventDefault();selectModality(value._KEY)" title="{{value._VALUE}}">{{value._KEY}}</a>
+                                </div>
+                                <button (click)="filter.ModalitiesInStudy='';showModalitySelector=false;" class="clear custom_button">Clear</button>
+                                <!-- <div class="col-md-12"></div> -->
+                                <a href="" (click)="$event.preventDefault();showMore=true" *ngIf="!showMore" class="more">more<i class="glyphicon glyphicon-triangle-bottom"></i></a>
+                                <a href="" (click)="$event.preventDefault();showMore=false" *ngIf="showMore" class="more">less<i class="glyphicon glyphicon-triangle-top"></i></a>
+                                <div class="more_block" *ngIf="showMore">
+                                    <a href="" *ngFor="let value of modalities.more | getKey;" (click)="$event.preventDefault();selectModality(value._KEY)" title="{{value._VALUE}}">{{value._KEY}}</a>
+                                    <div class="form-group">
+                                        <label>Custom modality code:</label>
+                                        <input [(ngModel)]="filter.ModalitiesInStudy" />
+                                        <button (click)="showModalitySelector=false" class="custom_button">Add</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6" *ngIf="filterMode === 'mwl'">
+                            <input id="Modality" type="text" size="5"  [(ngModel)]="filter['ScheduledProcedureStepSequence.Modality']" (click)="showModalitySelector = !showModalitySelector" placeholder=" Modality"  class="col-md-12" ng-keypress="checkKeyModality($event)"/>
+                            <div class="modality_selector [hidden]" *ngIf="showModalitySelector">
+                                <a href="" (click)="showModalitySelector=false" class="close"><i class="glyphicon glyphicon-remove"></i></a>
+                                <div class="common">
+                                    <a href="" *ngFor="let value of modalities.common; let key = index;" (click)="selectModality(key)" title="{{value}}">{{key}}</a>
+                                </div>
+                                <button (click)="filter.ScheduledProcedureStepSequence.Modality='';showModalitySelector=false;" class="clear custom_button">Clear</button>
+                                <!-- <div class="col-md-12"></div> -->
+                                <a href="" (click)="showMore=true" *ngIf="!showMore" class="more">more<i class="glyphicon glyphicon-triangle-bottom"></i></a>
+                                <a href="" (click)="showMore=false" *ngIf="showMore" class="more">less<i class="glyphicon glyphicon-triangle-top"></i></a>
+                                <div class="more_block" *ngIf="showMore">
+                                    <a href="" *ngFor="let value of modalities.more; let key = index;" (click)="selectModality(key)" title="{{value}}">{{key}}</a>
+                                    <div class="form-group">
+                                        <label>Custom modality code:</label>
+                                        <input [(ngModel)]="filter['ScheduledProcedureStepSequence.Modality']" />
+                                        <button (click)="showModalitySelector=false" class="custom_button">Add</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <label for="limit" class="block_seid pull-right">Page Size:</label>
+                        </div>
+                        <div class="col-md-6">
+                            <input  id="limit" type="number" min="1" [(ngModel)]="limit" class="col-md-12" required/>
+                        </div>
+                    </div>
+
+                </div>
+                <div class="col-md-3 block-1-2" *ngIf="filterMode === 'mwl'">
+                    <div class="row">
+                        <label for="StudyDateFrom" class="col-md-12">Scheduled Procedure Step Start Date / Time:</label>
+                    </div>
+                    <div class="row datetime">
+                        <div class="block_seid">
+                            <div class="col-md-12">
+                                <!--<input-->
+                                <!--class="col-md-12"-->
+                                <!--placeholder="Start date from"-->
+                                <!--(click)="studyDateFromOpen()"-->
+                                <!--id="StudyDateFrom"-->
+                                <!--type="text"-->
+                                <!--uib-datepicker-popup="{{format}}"-->
+                                <!--[(ngModel)]="studyDate.fromObject"-->
+                                <!--is-open="studyDateFrom.opened"-->
+                                <!--datepicker-options="dateOptions"-->
+                                <!--close-text="Close"/>-->
+                                <p-calendar dataType="string" [(ngModel)]="studyDate.from" dateFormat="yymmdd" monthNavigator="true" yearNavigator="true" yearRange="1800:2100" placeholder="Start date from"></p-calendar>
+                            </div>
+                            <div class="col-md-12">
+                                <!--<input-->
+                                <!--class="col-md-12"-->
+                                <!--placeholder="Start time from"-->
+                                <!--id="StudyTimeFrom"-->
+                                <!--type="text"-->
+                                <!--size="10"-->
+                                <!--[(ngModel)]="studyTime.fromObject"-->
+                                <!--data-lng-clockpicker data-lng-clockpicker-options='clockpicker' />-->
+                                <p-calendar (onSelect)="selectTime('from')" (onBlur)="selectTime('from')" (click)="timeClose()" [(ngModel)]="studyTime.fromObject" timeOnly="true" hourFormat="24" placeholder="Start time from"></p-calendar>
+                            </div>
+                        </div>
+                        <div class="minus text-center">
+                            -
+                        </div>
+                        <div class="block_seid">
+                            <div class="col-md-12">
+                                <!--<input-->
+                                <!--class="col-md-12"-->
+                                <!--placeholder=" Start date to"-->
+                                <!--class="col-md-12"-->
+                                <!--id="StudyDateTo"-->
+                                <!--(click)="studyDateToOpen()"-->
+                                <!--is-open="studyDateTo.opened"-->
+                                <!--close-text="Close"-->
+                                <!--type="text"-->
+                                <!--size="10"-->
+                                <!--[(ngModel)]="studyDate.toObject"-->
+                                <!--uib-datepicker-popup="{{format}}"/>-->
+                                <p-calendar dataType="string" [(ngModel)]="studyDate.to" dateFormat="yymmdd" monthNavigator="true" yearNavigator="true" yearRange="1800:2100" placeholder=" Start date to"></p-calendar>
+                            </div>
+                            <div class="col-md-12">
+                                <!--<input-->
+                                <!--class="col-md-12"-->
+                                <!--placeholder="Start time to"-->
+                                <!--id="StudyTimeTo"-->
+                                <!--type="text"-->
+                                <!--size="10"-->
+                                <!--[(ngModel)]="studyTime.toObject"-->
+                                <!--data-lng-clockpicker data-lng-clockpicker-options='clockpicker' />-->
+                                <p-calendar (onSelect)="selectTime('to')" [(ngModel)]="studyTime.toObject" timeOnly="true" hourFormat="24" placeholder=" Start time to"></p-calendar>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3 block-1-2" *ngIf="filterMode === 'study'">
+                    <div class="row">
+                        <label for="StudyDateFrom" class="col-md-12">Study Date / Time:</label>
+
+                    </div>
+                    <div class="row datetime">
+                        <div class="block_seid">
+                            <div class="col-md-12">
+                                <!--<input-->
+                                <!--class="col-md-12"-->
+                                <!--placeholder="Studydate from"-->
+                                <!--(click)="studyDateFromOpen()"-->
+                                <!--id="StudyDateFrom"-->
+                                <!--type="text"-->
+                                <!--uib-datepicker-popup="{{format}}"-->
+                                <!--[(ngModel)]="studyDate.fromObject"-->
+                                <!--is-open="studyDateFrom.opened"-->
+                                <!--datepicker-options="dateOptions"-->
+                                <!--close-text="Close"/>-->
+                                <!--<input type="date" placeholder="Study date from" name="StudyDateFrom" value="12/13/2013"/>-->
+                                <p-calendar dataType="string" [(ngModel)]="studyDate.from" dateFormat="yymmdd" monthNavigator="true" yearNavigator="true" yearRange="1800:2100" placeholder="Study date from"></p-calendar>
+                            </div>
+                            <div class="col-md-12">
+                                <!--<input-->
+                                <!--class="col-md-12"-->
+                                <!--placeholder="Studytime from"-->
+                                <!--id="StudyTimeFrom"-->
+                                <!--type="text"-->
+                                <!--size="10"-->
+                                <!--[(ngModel)]="studyTime.fromObject"-->
+                                <!--data-lng-clockpicker data-lng-clockpicker-options='clockpicker' />-->
+                                <!--<input type="time" placeholder="Study time from" name="StudyDateFrom" value="20:12" />-->
+                                <p-calendar (onSelect)="selectTime('from')" (onBlur)="selectTime('from')" (click)="timeClose()" [(ngModel)]="studyTime.fromObject" timeOnly="true" hourFormat="24" placeholder="Study time from"></p-calendar>
+                                <!--<div class="input-group clockpicker" data-placement="right" data-align="top" data-autoclose="true">-->
+                                    <!--<input type="text" class="form-control" value="22:33">-->
+                                    <!--<span class="input-group-addon">-->
+                                    <!--<span class="glyphicon glyphicon-time"></span>-->
+                                <!--</span>-->
+                            </div>
+                        </div>
+                        <div class="minus text-center">
+                            -
+                        </div>
+                        <div class="block_seid">
+                            <div class="col-md-12">
+                                <!--<input-->
+                                <!--class="col-md-12"-->
+                                <!--placeholder=" study._VALUE date to"-->
+                                <!--class="col-md-12"-->
+                                <!--id="StudyDateTo"-->
+                                <!--(click)="studyDateToOpen()"-->
+                                <!--is-open="studyDateTo.opened"-->
+                                <!--close-text="Close"-->
+                                <!--type="text"-->
+                                <!--size="10"-->
+                                <!--[(ngModel)]="studyDate.toObject"-->
+                                <!--uib-datepicker-popup="{{format}}"/>-->
+                                <!--<input type="date" placeholder="Study date to" name="StudyDateFrom" [(ngModel)]="studyDate.toObject" />-->
+                                <p-calendar dataType="string" [(ngModel)]="studyDate.to" dateFormat="yymmdd" monthNavigator="true" yearNavigator="true" yearRange="1800:2100" placeholder=" Study date to"></p-calendar>
+
+                            </div>
+                            <div class="col-md-12">
+                                <!--<input-->
+                                <!--class="col-md-12"-->
+                                <!--placeholder="Studytime to"-->
+                                <!--id="StudyTimeTo"-->
+                                <!--type="text"-->
+                                <!--size="10"-->
+                                <!--[(ngModel)]="studyTime.toObject"-->
+                                <!--data-lng-clockpicker data-lng-clockpicker-options='clockpicker' />-->
+                                <!--<input type="time" placeholder="Study time from" name="StudyDateFrom" [(ngModel)]="studyTime.toObject" />-->
+                                <p-calendar (onSelect)="selectTime('to')" [(ngModel)]="studyTime.toObject" timeOnly="true" hourFormat="24" placeholder=" Study time to"></p-calendar>
+                                <!--<div class="input-group clockpicker" data-placement="right" data-align="top" data-autoclose="true">-->
+                                    <!--<input type="text" class="form-control" [(ngModel)]="studyTime.toObject">-->
+                                    <!--<span class="input-group-addon">-->
+                                    <!--<span class="glyphicon glyphicon-time"></span>-->
+                                <!--</span>-->
+                                <!--</div>-->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <a class="clearform_button" title="Clear all filters" href="" (click)="$event.preventDefault();clearForm()">
+                    Clear <span class="glyphicon glyphicon-remove"></span>
+                </a>
+            </div>
+            <div class="buttons_block col-md-2">
+                <!--         <select [(ngModel)]="filter.orderby">
+                            <option value="">Order by ...</option>
+                            <option value="PatientName">Order by patient._VALUE name &darr;</option>
+                            <option value="-PatientName">Order by patient._VALUE name &uarr;</option>
+                            <option value="StudyDate,StudyTime">Order by study._VALUE date &darr;</option>
+                            <option value="-StudyDate,-StudyTime">Order by study._VALUE date &uarr;</option>
+                            <option value="PatientName,StudyDate,StudyTime">Order by patient._VALUE name &darr; and study._VALUE date &darr;</option>
+                            <option value="PatientName,-StudyDate,-StudyTime">Order by patient._VALUE name &darr; and study._VALUE date &uarr;</option>
+                            <option value="-PatientName,StudyDate,StudyTime">Order by patient._VALUE name &uarr; and study._VALUE date &darr;</option>
+                            <option value="-PatientName,-StudyDate,-StudyTime">Order by patient._VALUE name &uarr; and study._VALUE date &uarr;</option>
+                        </select> -->
+                <div class="orderbyblock">
+                    <div class="btn-group" role="group" >
+                        <button id="showoptionlistbutton" type="button" class="btn btn-default selectedorderbutton" (click)="showoptionlist = !showoptionlist" >
+                            <span id="selectedorder" class="selectedorder"  [innerHtml]="orderbytext"></span>
+                            <span class="caret"></span>
+                        </button>
+                        <div class="optionlist" id="showoptionlist" *ngIf="showoptionlist">
+                            <ul>
+                                <!--                 <li [ngClass]="{active:filter.orderby === ''}" (click)="filter.orderby = '';showoptionlist=false;orderbytext = 'Order by ...'">Order by ...</li>
+                                                <li [ngClass]="{active:filter.orderby === 'PatientName'}" (click)="filter.orderby = 'PatientName';showoptionlist=false;orderbytext = 'Patient patient._VALUE name &darr;'">Patient patient._VALUE name &darr; <span class="glyphicon glyphicon-sort-by-alphabet"></span> <span class="orderbydateasc"></span></li>
+                                                <li [ngClass]="{active:filter.orderby === '-PatientName'}" (click)="filter.orderby = '-PatientName';showoptionlist=false;orderbytext = 'Patient patient._VALUE name &uarr;'">Patient patient._VALUE name &uarr;<span class="glyphicon glyphicon-sort-by-alphabet-alt"></span></li>
+                                                <li [ngClass]="{active:filter.orderby === 'StudyDate,StudyTime'}" (click)="filter.orderby = 'StudyDate,StudyTime';showoptionlist=false;orderbytext = 'study._VALUE study._VALUE date &darr;'">study._VALUE study._VALUE date &darr; <span class="orderbydatedesc"></span></li>
+                                                <li [ngClass]="{active:filter.orderby === '-StudyDate,-StudyTime'}" (click)="filter.orderby = '-StudyDate,-StudyTime';showoptionlist=false;orderbytext = 'study._VALUE study._VALUE date &uarr;'">study._VALUE study._VALUE date &uarr;</li>
+                                                <li [ngClass]="{active:filter.orderby === 'PatientName,StudyDate,StudyTime'}" (click)="filter.orderby = 'PatientName,StudyDate,StudyTime';showoptionlist=false;orderbytext = 'study._VALUE patient._VALUE name &darr; and study._VALUE date &darr;'">study._VALUE patient._VALUE name &darr; and study._VALUE date &darr;</li>
+                                                <li [ngClass]="{active:filter.orderby === 'PatientName,-StudyDate,-StudyTime'}" (click)="filter.orderby = 'PatientName,-StudyDate,-StudyTime';showoptionlist=false;orderbytext = 'study._VALUE patient._VALUE name &darr; and study._VALUE date &uarr;'">study._VALUE patient._VALUE name &darr; and study._VALUE date &uarr;</li>
+                                                <li [ngClass]="{active:filter.orderby === '-PatientName,StudyDate,StudyTime'}" (click)="filter.orderby = '-PatientName,StudyDate,StudyTime';showoptionlist=false;orderbytext = 'study._VALUE patient._VALUE name &uarr; and study._VALUE date &darr;'">study._VALUE patient._VALUE name &uarr; and study._VALUE date &darr;</li>
+                                                <li [ngClass]="{active:filter.orderby === '-PatientName,-StudyDate,-StudyTime'}" (click)="filter.orderby = '-PatientName,-StudyDate,-StudyTime';showoptionlist=false;orderbytext = 'study._VALUE patient._VALUE name &uarr; and study._VALUE date &uarr;'">study._VALUE patient._VALUE name &uarr; and study._VALUE date &uarr;</li> -->
+                                <li *ngFor="let order of orderby; let i = index;" [ngClass]="{active:filter.orderby === order.value}" (click)="showoptionlist = false; filter.orderby = order.value; orderbytext = order.label; filterMode = order.mode;extendedFilter(false);" title="{{filterMode}}" [innerHtml]="order.label"></li>
+                            </ul>
+                        </div>
+                        <!--                 <button class="btn btn-default" type="button">Go!</button>
+                        -->             <button type="button" class="btn btn-info btn-default executebutton" *ngIf="filterMode==='patient'"
+
+                                                id="querypatients" (click)="queryPatients(0);patientmode=true" title="Query Patients">
+                        <span class="glyphicon glyphicon-refresh"></span>
+                    </button>
+                        <button type="button" class="btn btn-default executebutton" [disabled]="filter.orderby === ''"
+                                *ngIf="filterMode==='study'" id="querystudies" (click)="queryStudies(0);patientmode=false" title="Query Studies">
+                            <span class="glyphicon glyphicon-refresh"></span>
+                        </button>
+                        <button *ngIf="filterMode==='mwl'" type="button" class="btn btn-default executebutton btn-info"  id="querymwl" (click)="queryMWL(0);patientmode=false" title="Query MWL">
+                            <span class="glyphicon glyphicon-refresh"></span>
+                        </button>
+                    </div>
+                </div>
+
+                <a *ngIf="isRole('admin')" (click)="deleteRejectedInstances()" href="" title="Delete Rejected Instances permanently" class="btn-danger btn">Delete Instances
+                    <span class="glyphicon glyphicon-trash"></span>
+                </a>
+            </div>
+        </div>
+        <!-- <div class="placeholder-35"></div> -->
+        <a href="" (click)="extendedFilter(true, $event)" *ngIf="!advancedConfig" class="more">Extended filters<i class="glyphicon glyphicon-triangle-bottom"></i></a>
+        <a href="" (click)="extendedFilter(false, $event)" *ngIf="advancedConfig" class="more [hidden]">Close extended filters<i class="glyphicon glyphicon-triangle-top"></i></a>
+
+        <div class="row [hidden] filter hidden_filters" *ngIf="advancedConfig">
+            <div class="col-md-3 block-2-1">
+                <div class="row">
+                    <div class="col-md-6" *ngIf="filterMode === 'study'">
+                        <input id="InstitutionName" type="text" [(ngModel)]="filter.InstitutionName" placeholder="Institution Name" title="Institution Name" class="col-md-12" />
+                    </div>
+                    <div class="col-md-6" *ngIf="filterMode === 'study'">
+                        <input id="StudyDescription" type="text" [(ngModel)]="filter.StudyDescription" placeholder="Studydescription" title="study._VALUE description" class="col-md-12" />
+                    </div>
+                    <div class="col-md-6" *ngIf="filterMode === 'study'">
+                        <input id="InstitutionalDepartmentName" type="text" [(ngModel)]="filter.InstitutionalDepartmentName" placeholder="Institutional Department Name" title="Institutional Department Name" class="col-md-12 clearable" />
+                    </div>
+                    <div class="col-md-6" *ngIf="filterMode === 'study'">
+                        <input id="StationName" type="text" [(ngModel)]="filter.StationName" placeholder="Station Name" title="Station Name" class="col-md-12" />
+                    </div>
+                    <div class="col-md-6" *ngIf="filterMode === 'patient'">
+                        <label title="Only patients with studies">
+                            <input type="checkbox" [(ngModel)]="filter.withoutstudies" ng-true-value="false" ng-false-value="true"> only with studies
+                        </label>
+                    </div>
+                    <div class="col-md-6" *ngIf="filterMode === 'patient'">
+                        <label>
+                            Patient's Sex
+                            <select
+                                    (ngModelChange)="onChange($event, 'filter.PatientSex')"
+                                    [ngModel]="filter.PatientSex">
+                                <option [ngValue]="o.Value[0]" *ngFor="let o of options.genders">{{o.title}}</option>
+                            </select>
+                        </label>
+                    </div>
+                    <div class="col-md-6" *ngIf="filterMode === 'mwl'">
+                        <input id="ScheduledProcedureStepStatus" type="text" [(ngModel)]="filter['ScheduledProcedureStepSequence.ScheduledProcedureStepStatus']" placeholder="SPS Status" title="Scheduled Procedure Step Status" class="col-md-12" />
+                    </div>
+                    <!--<div class="col-md-6" *ngIf="filterMode === 'mwl'">
+                        <input id="ScheduledProcedureStepSequence" type="text" [(ngModel)]="filter['ScheduledProcedureStepSequence.ScheduledProcedureStepStartDate']" placeholder="SPS Description" title="Scheduled Procedure Step Description" class="col-md-12" />
+                    </div>-->
+                    <div class="col-md-6" *ngIf="filterMode === 'study'">
+                        <input id="SOPClassesInStudy" type="text" [(ngModel)]="filter.SOPClassesInStudy" placeholder="SOP classes in study" title="SOP classes in study" class="col-md-12 clearable" />
+                    </div>
+                    <div class="col-md-6" *ngIf="filterMode === 'study'">
+                        <input id="SeriesDescription" type="text" [(ngModel)]="filter.SeriesDescription" placeholder="Series Description" title="Series Description" class="col-md-12 clearable" />
+                    </div>
+                </div>
+
+                <!--         <div class="row">
+                            <div class="col-md-6 col-md-offset-6">
+                                <input id="SeriesDescription" type="text" [(ngModel)]="filter.SeriesDescription" placeholder=" Series Description" class="col-md-12" />
+                            </div>
+                        </div> -->
+                <!--         <div class="row">
+                            <div class="col-md-6 col-md-offset-6">
+                                <input id="BodyPartExamined" type="text" [(ngModel)]="filter.BodyPartExamined" placeholder=" Body Part" class="col-md-12" />
+                            </div>
+                        </div> -->
+
+                <!--         <div class="row">
+                            <div class="col-md-6 col-md-offset-6">
+                                <input id="InstitutionName" type="text" [(ngModel)]="filter.InstitutionName" placeholder=" Institution Name" class="col-md-12" />
+                            </div>
+                        </div> -->
+                <!--         <div class="row">
+                        </div> -->
+                <!--         <div class="row">
+                            <div class="col-md-6 col-md-offset-6">
+                                <input id="SeriesInstanceUID" type="text" [(ngModel)]="filter.SeriesInstanceUID" placeholder=" Series Instance UID" class="col-md-12" />
+                            </div>
+                        </div> -->
+                <!--         <div class="row">
+                            <div class="col-md-6 col-md-offset-6">
+                                <input id="objectUID" type="text" [(ngModel)]="filter.ObjectUID" placeholder=" Object UID" class="col-md-12" />
+                            </div>
+                        </div> -->
+
+            </div>
+            <div class="col-md-3 block-2-1">
+                <!-- <div class="row" *ngIf="isRole('admin')"> -->
+                <!--             <label for="reject" class="block_seid text-right">Reject:</label>
+                            <div class="block_seid"> -->
+                <!--                 <select id="reject" [(ngModel)]="reject" class="col-md-9">
+                                    <option ng-repeat="rjn in rjnotes" tooltip="{{rjn.codeMeaning}}"
+                                            value="{{rjn.codeValue}}^{{rjn.codingSchemeDesignator}}">{{rjn.label}}</option>
+                                </select> -->
+                <!--                 <a (click)="deleteRejectedInstances()" href="" tooltip="Delete Rejected Instances permanently" class="custom_button deleteRejctedI">
+                                    <span class="glyphicon glyphicon-remove"></span>
+                                </a> -->
+                <!-- </div> -->
+                <!-- </div> -->
+                <div class="row">
+
+                    <div class="col-md-6" *ngIf="filterMode === 'study'">
+                        <label title="Show only expired studies">
+                            <input type="checkbox" [(ngModel)]="filter.expired"> Only expired studies
+                        </label>
+                    </div>
+                    <div class="col-md-6" *ngIf="filterMode === 'study'">
+                        <label title="Show only incomplete studies"  >
+                            <input type="checkbox" [(ngModel)]="filter.incomplete"> Only incomplete studies
+                        </label>
+                    </div>
+                    <div class="col-md-6" *ngIf="filterMode === 'study'">
+                        <input id="StudyID" type="text" [(ngModel)]="filter.StudyID" placeholder="StudyID" title="study._VALUE ID" class="col-md-12" />
+                    </div>
+                    <div class="col-md-6" *ngIf="filterMode === 'mwl'">
+                        <input id="ScheduledPerformingPhysicianName" type="text" [(ngModel)]="filter['ScheduledProcedureStepSequence.ScheduledPerformingPhysicianName']" placeholder="Scheduled Performing Physician's Name" title="Scheduled Performing Physician's Name" class="col-md-12" />
+                    </div>
+                    <div class="col-md-6" *ngIf="filterMode === 'study' || filterMode === 'mwl'">
+                        <input id="StudyInstanceUID" type="text" [(ngModel)]="filter.StudyInstanceUID" placeholder="Studyinstance UID" title="study._VALUE instance UID" class="col-md-12 clearable" />
+                    </div>
+                    <div class="col-md-6" *ngIf="filterMode === 'study'">
+                        <input id="SendingApplicationEntityTitleOfSeries" type="text" [(ngModel)]="filter.SendingApplicationEntityTitleOfSeries" placeholder="Sending Application Entity Title of Series" title="Sending Application Entity Title of Series" class="col-md-12 clearable" />
+                    </div>
+                    <div class="col-md-6" *ngIf="filterMode === 'study'">
+                        <input id="BodyPartExamined" type="text" [(ngModel)]="filter.BodyPartExamined" placeholder="Body Part Examined" title="Body Part Examined" class="col-md-12 clearable" />
+                    </div>
+                    <div class="col-md-6" *ngIf="filterMode === 'patient'">
+                        <!--                 <input id="PatientBirthDate" [(ngModel)]="birthDate.filter" type="hiden" [(ngModel)]="filter.PatientBirthDate" />
+                         -->
+                        <!--<input-->
+                        <!--class="col-md-12"-->
+                        <!--placeholder="Patient's Birth Date"-->
+                        <!--(click)="birthDateOpen()"-->
+                        <!--id="birthDate"-->
+                        <!--type="text"-->
+                        <!--uib-datepicker-popup="{{format}}"-->
+                        <!--[(ngModel)]="birthDate.object"-->
+                        <!--is-open="birthDate.opened"-->
+                        <!--datepicker-options="dateOptions"-->
+                        <!--close-text="Close"/>-->
+                        <p-calendar dataType="string" [(ngModel)]="filter.PatientBirthDate" dateFormat="yymmdd" monthNavigator="true" yearNavigator="true" yearRange="1800:2100" placeholder=" Patient's Birth Date"></p-calendar>
+
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 block-2-1" *ngIf="filterMode === 'study'">
+                <div class="row">
+                    <div class="col-md-6">
+                        <label title="Show only studies failed to be retrieved">
+                            <input type="checkbox" [(ngModel)]="filter.retrievefailed"> Only failed to be retrieved
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!--<pre>-->
+            <!--visibleHeaderIndex:{{visibleHeaderIndex}};-->
+        <!--</pre>-->
+        <div class="header_block" *ngIf="patients && patients.length != 0">
+            <div class="thead header1" [ngClass]="{'hover':visibleHeaderIndex === 0}">
+                <div class="tr_row">
+                    <div class="th">
+                    </div>
+                    <div style="width:14%" class="th" >Patient Name
+                        <a href="" class="order_arrow" (click)="filter.orderby = 'PatientName';morePatients !== undefined ? queryPatients(0) : queryStudies(0)">
+                            <span class="glyphicon glyphicon-triangle-top" aria-hidden="true"></span>
+                        </a>
+                        <a href="" class="order_arrow" (click)="filter.orderby = '-PatientName';morePatients !== undefined ? queryPatients(0) : queryStudies(0)">
+                            <span class="glyphicon glyphicon-triangle-bottom" aria-hidden="true"></span>
+                        </a>
+                    </div>
+                    <div class="th" style="width:12%">
+                        Patient ID
+                    </div>
+                    <div class="th" style="width:12%">
+                        <!-- Referring Physician's Name -->
+                        Issuer of patient
+                    </div>
+                    <div class="th" style="width:8%">
+                        Birth Date (YYYYMMDD)
+                    </div>
+                    <div class="th" style="width:4%">
+                        Sex
+                    </div>
+                    <div class="th" style="width:38%">
+                        Patient Comments
+                    </div>
+                    <div class="th" style="width:2%" title="Number of Patient Related Studies">
+                        #S
+                    </div>
+                </div>
+            </div>
+            <div class="thead header2" [ngClass]="{'hover':visibleHeaderIndex === 1}">
+                <div class="tr_row">
+                    <div class="th">
+
+                    </div>
+                    <div class="th">
+                        study ID
+                    </div>
+                    <div class="th"  style="width:16.6%">
+                        study Instance UID
+                    </div>
+                    <div class="th">study Date
+                        <a href="" class="order_arrow" (click)="filter.orderby = 'StudyDate,StudyTime';queryStudies(0)">
+                            <span class="glyphicon glyphicon-triangle-top" aria-hidden="true"></span>
+                        </a>
+                        <a href="" class="order_arrow" (click)="filter.orderby = '-StudyDate,-StudyTime';queryStudies(0)">
+                            <span class="glyphicon glyphicon-triangle-bottom" aria-hidden="true"></span>
+                        </a>
+                    </div>
+                    <div style="width:5%" class="th">study Time</div>
+                    <div class="th" title="Referring Physician's Name">R. Physician's Name</div>
+                    <div class="th">Accession Number</div>
+                    <div style="width:5%" class="th">Modalities</div>
+                    <div style="width:17.3%" class="th">study Description</div>
+                    <div style="width:3%" class="th">#S</div>
+                    <div style="width:3%" class="th">#I</div>
+                </div>
+            </div>
+            <div class="thead header3" [ngClass]="{'hover':visibleHeaderIndex === 2}">
+
+                <div class="tr_row">
+                    <div class="th">
+                    </div>
+                    <div class="th">Station Name</div>
+                    <div class="th">Series Number</div>
+                    <div class="th">PPS Start Date</div>
+                    <div class="th">PPS Start Time</div>
+                    <div class="th">Body Part</div>
+                    <div class="th">Modality</div>
+                    <div style="width:21%" class="th">Series Description</div>
+                    <div style="width:2%" class="th">#I</div>
+                </div>
+            </div>
+            <div class="thead header4" [ngClass]="{'hover':visibleHeaderIndex === 3}">
+                <div class="tr_row ">
+                    <div class="th">
+                    </div>
+                    <div class="th">SOP Class UID</div>
+                    <div class="th">Instance Number</div>
+                    <div class="th">Content Date</div>
+                    <div class="th">Content Time</div>
+                    <div style="width:28%" class="th">Content Description</div>
+                    <div style="width:2%" class="th">#F</div>
+                </div>
+            </div>
+            <div class="thead header5" [ngClass]="{'hover':visibleHeaderIndex === 4}">
+                <div class="tr_row">
+                    <div class="th">
+
+                    </div>
+                    <div class="th">
+                        Requested Procedure ID
+                    </div>
+                    <div class="th"  style="width:16.6%">
+                        study Instance UID
+                    </div>
+                    <div class="th" title="Scheduled Procedure Step Start Date">SPS Start Date
+                    </div>
+                    <div style="width:5%" class="th" title="Scheduled Procedure Step Start Time">SPS Start Time</div>
+                    <div class="th" title="Scheduled Performing Physician's Name">SP Physician's Name</div>
+                    <div class="th">Accession Number</div>
+                    <div style="width:5%" class="th">Modalities</div>
+                    <div style="width:17.3%" class="th" title="Scheduled Procedure Step Description">SPS Description</div>
+                    <div style="width:6%" class="th" title="Scheduled Station AE Title">SS AE Title</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Table -->
+    <div id="tableblock" class="div-table animated" [ngClass]="{extended:(advancedConfig),modality:showModalitySelector}" contextmenu-container="meta.contextmenu">
+<!--<pre>-->
+    <!--<div *ngFor="let m of patients | getKey">-->
+        <!--{{m._KEY}} : {{m._VALUE.attrs |json}}-->
+    <!--</div>-->
+<!--</pre>-->
+        <div class="repeat0" contextmenu-item='patient._VALUE' *ngFor="let patient of patients | getKey" (click)='select(patient._VALUE,"patient",{patientkey:patient._KEY})'>
+            <div class="more_menu_content">
+                <div class="more_menu_study">
+                    <div class="colcell">
+                        <div *ngIf="patientmode" class="table_btn" [innerHtml]="patient._VALUE.offset+1+'.'"> </div>
+                    </div>
+                    <div class="exeq_buttons">
+                        <div class="morefunction" title="Show more functions" (click)="showMoreFunction($event)"></div>
+                        <a class="table_btn hiddenbuttons" *ngIf="isRole('admin')" (click)="$event.preventDefault();editPatient(patient._VALUE, patient._KEY);" href="" title="Edit Patient">
+                            <span class="glyphicon glyphicon-pencil"></span>
+                        </a>
+                        <a class="table_btn hiddenbuttons" *ngIf="isRole('admin')" (click)="$event.preventDefault();patient._VALUE.createButtons = false;createMWL(patient._VALUE)" href="" title="Create MWL">
+                            <span class="glyphicon glyphicon-plus" ></span>
+                        </a>
+                        <a class="table_btn hiddenbuttons"  *ngIf="isRole('admin') && patient._VALUE.attrs['00201200'] && patient._VALUE.attrs['00201200'].Value && patient._VALUE.attrs['00201200'].Value[0] && patient._VALUE.attrs['00201200'].Value[0] === 0" (click)="$event.preventDefault();deletePatient(patient._VALUE, patients, patient._KEY)" href="" title="Delete Patient">
+                            <span class="glyphicon glyphicon-remove"></span>
+                        </a>
+                    </div>
+                </div>
+            </div>
+            <div class="thead" [ngClass]="{hide:patient._VALUE.hide}">
+                <div class="tr_row" [ngClass]="{selected: patient._VALUE.selected}">
+                    <div class="th" style="width:10%">
+                        <!--<div *ngIf="patientmode" class="table_btn" [innerHtml]="patient._VALUE.offset+1+'.'"> </div>-->
+                        <a class="table_btn" (click)="$event.preventDefault();patient._VALUE.showAttributes = !patient._VALUE.showAttributes" href="" title="Show Attributes">
+                            <span class="glyphicon glyphicon-th-list"></span>
+                        </a>
+
+                        <a *ngIf="!(isRole('admin') && patient._VALUE.attrs['00201200'] && patient._VALUE.attrs['00201200'].Value && patient._VALUE.attrs['00201200'].Value[0] && patient._VALUE.attrs['00201200'].Value[0] === 0) && !(patient._VALUE.studies || patient._VALUE.mwls)" class="table_btn"  (click)="queryAllStudiesOfPatient(patient._VALUE,0, $event)" href="" title="Show Studies">&#9658;</a> <!--[hidden]="patient._VALUE.studies || patient._VALUE.mwls"-->
+                        <a *ngIf="!(isRole('admin') && patient._VALUE.attrs['00201200'] && patient._VALUE.attrs['00201200'].Value && patient._VALUE.attrs['00201200'].Value[0] && patient._VALUE.attrs['00201200'].Value[0] === 0) && (patient._VALUE.studies || patient._VALUE.mwls)" class="table_btn" (click)="$event.preventDefault();patients[patient._KEY].studies = null" href="" title="Hide Studies">&#9660;</a>
+                        <a class="table_btn" *ngIf="!patient._VALUE.showmwls && patient._VALUE.mwls" (click)="$event.preventDefault();patient._VALUE.showmwls = true" href="" title="Show MWLs">&#9658;</a>
+                        <a class="table_btn" *ngIf="patient._VALUE.showmwls && patient._VALUE.mwls" (click)="$event.preventDefault();patient._VALUE.showmwls = false" href="" title="Hide MWLs">&#9660;</a>
+                    </div>
+                    <div style="width:14%" class="th txt hover_cell" ><div *ngIf="patient._VALUE.attrs['00100010'] && patient._VALUE.attrs['00100010'].Value && patient._VALUE.attrs['00100010'].Value[0]" >{{(patient._VALUE.attrs['00100010'].Value[0].Alphabetic) || '&nbsp;'}}</div></div>
+                    <div style="width:12%" class="th txt hover_cell" ><div *ngIf="patient._VALUE.attrs['00100020'] && patient._VALUE.attrs['00100020'].Value && patient._VALUE.attrs['00100020'].Value[0]" tooltip="{{(patient._VALUE.attrs['00100020'].Value[0]) || '&nbsp;'}}">{{(patient._VALUE.attrs['00100020'].Value[0]) || '&nbsp;'}}</div></div>
+                    <div style="width:12%" class="th" ><div *ngIf="patient._VALUE.attrs['00100021'] && patient._VALUE.attrs['00100021'].Value && patient._VALUE.attrs['00100021'].Value[0]" class="txt hover_cell" tooltip="{{(patient._VALUE.attrs['00100021'].Value[0])|| '&nbsp;'}}">{{(patient._VALUE.attrs['00100021'].Value[0]) || '&nbsp;'}}</div></div>
+                    <div style="width:8%"  class="th hover_cell" ><div *ngIf="patient._VALUE.attrs['00100030'] && patient._VALUE.attrs['00100030'].Value && patient._VALUE.attrs['00100030'].Value[0]">{{(patient._VALUE.attrs['00100030'].Value[0] | formatDA) || '&nbsp;'}}</div></div>
+                    <div style="width:4%" class="th hover_cell" ><div *ngIf="patient._VALUE.attrs['00100040'] && patient._VALUE.attrs['00100040'].Value && patient._VALUE.attrs['00100040'].Value[0]"  [innerHtml]="(patient._VALUE.attrs['00100040'].Value[0]) || '&nbsp;'"></div></div>
+                    <div style="width:38%" class="th txt hover_cell" ><div *ngIf="patient._VALUE.attrs['00104000'] && patient._VALUE.attrs['00104000'].Value && patient._VALUE.attrs['00104000'].Value[0]" tooltip="{{(patient._VALUE.attrs['00104000'].Value[0]) || '&nbsp;'}}">{{(patient._VALUE.attrs['00104000'].Value[0]| trim:80) || '&nbsp;'}}</div></div>
+                    <div style="width:2%" class="th hover_cell"><div *ngIf="patient._VALUE.attrs['00201200'] && patient._VALUE.attrs['00201200'].Value && patient._VALUE.attrs['00201200'].Value[0]" >{{(patient._VALUE.attrs['00201200'].Value[0]) || '&nbsp;'}}</div></div>
+                </div>
+            </div>
+            <div class="tr_row"  *ngIf="patient._VALUE.showAttributes && patient._VALUE.attrs">
+                <div class="td_cell attribute_list" id="{{patient._VALUE.attrs['00100020'].Value[0]}}">
+                    <attribute-list *ngIf="patient._VALUE.attrs" [attrs]="patient._VALUE.attrs"></attribute-list>
+                </div>
+            </div>
+            <div class="repeat1" *ngFor="let study of patients[patient._KEY].studies | getKey" contextmenu-item="study">
+                <div class="tbody">
+                    <div class="tr_row">
+                        <div class="more_menu_content">
+                            <div class="more_menu_study">
+                                <div class="colcell" [innerHtml]="study._VALUE.offset+1+'.'"> </div>
+                                <div class="exeq_buttons">
+                                    <div class="morefunction" title="Show more functions" (click)="showMoreFunction($event)"></div>
+                                    <a class="hiddenbuttons" *ngIf="isRole('admin')" (click)="editStudy(patients[patient._KEY], patient._KEY, study._KEY, study._VALUE)" href="" title="Edit study">
+                                        <span class="glyphicon glyphicon-pencil"></span>
+                                    </a>
+                                    <a class="hiddenbuttons" (click)="exportStudy(study._VALUE)" *ngIf="exporterID && isRole('admin')" href="" title="Export study">
+                                        <span class="glyphicon glyphicon-export"></span>
+                                    </a>
+                                    <a class="hiddenbuttons" (click)="$event.preventDefault();storageCommitmen('study', study._VALUE)" *ngIf="isRole('admin')" href="" title="Verify storage commitmen">
+                                        <span class="glyphicon glyphicon-ok"></span>
+                                    </a>
+                                    <a class="hiddenbuttons" [hidden]="trashaktive || !isRole('admin') || study._VALUE.attrs['00201208'].Value[0] === 0" (click)="rejectStudy(study._VALUE)" href="" title="Reject study">
+                                        <span class="glyphicon glyphicon-trash"></span>
+                                    </a>
+                                    <a class="hiddenbuttons" *ngIf="trashaktive && isRole('admin')" (click)="deleteStudy(study._VALUE)" href="" title="Delete study permanently">
+                                        <span class="glyphicon glyphicon-remove"></span>
+                                    </a>
+                                    <a class="hiddenbuttons"  *ngIf="trashaktive && isRole('admin')" (click)="rejectStudy(study._VALUE)" href="" title="Restore study">
+                                        <span class="glyphicon glyphicon-repeat"></span>
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="subblock">
+                            <div class="td_row thead repeat1_hover" (click)='select(study._VALUE,"study", {"patientkey":patient._KEY,"study":study._KEY})' [ngClass]="{selected: study._VALUE.selected, trash:trashaktive}">
+                                <div class="td_cell table_btn">
+                                    <a (click)="$event.preventDefault();study._VALUE.showAttributes = !study._VALUE.showAttributes" href="" title="Show Attributes">
+                                        <span class="glyphicon glyphicon-th-list"></span>
+                                    </a>
+
+                                    <a *ngIf="!(isRole('admin') && study._VALUE.attrs['00201208'] && study._VALUE.attrs['00201208'].Value && study._VALUE.attrs['00201208'].Value[0] && study._VALUE.attrs['00201208'].Value[0] === 0) && !(study._VALUE.series)" (click)="$event.preventDefault();querySeries(study._VALUE,0)" href="" title="Show Series">&#9658;</a>
+                                    <a *ngIf="!(isRole('admin') && study._VALUE.attrs['00201208'] && study._VALUE.attrs['00201208'].Value && study._VALUE.attrs['00201208'].Value[0] && study._VALUE.attrs['00201208'].Value[0] === 0) && study._VALUE.series" (click)="$event.preventDefault();study._VALUE.series = null" href="" title="Hide Series">&#9660;</a>
+                                </div>
+                                <div style="width:10.4%" class="td_cell txt hover_cell"><div tooltip="{{study._VALUE.attrs['00200010'].Value[0]}}" *ngIf="study._VALUE.attrs['00200010'] && study._VALUE.attrs['00200010'].Value && study._VALUE.attrs['00200010'].Value[0]">{{(study._VALUE.attrs['00200010'].Value[0]) || '&nbsp;'}}</div></div>
+                                <div  style="width:17.3%" class="td_cell txt hover_cell"><div *ngIf="study._VALUE.attrs['0020000D'] && study._VALUE.attrs['0020000D'].Value && study._VALUE.attrs['0020000D'].Value[0]" tooltip="{{study._VALUE.attrs['0020000D'].Value[0]}}">{{study._VALUE.attrs['0020000D'].Value[0] | trim:30}}</div></div>
+                                <div class="td_cell txt hover_cell" >
+                                    <div *ngIf="study._VALUE.attrs['00080020'] && study._VALUE.attrs['00080020'].Value && study._VALUE.attrs['00080020'].Value[0]" tooltip="{{study._VALUE.attrs['00080020'].Value[0]}}">
+                                        {{(study._VALUE.attrs['00080020'].Value[0] | formatDA) || '&nbsp;'}}
+                                        <a *ngIf="study._VALUE.attrs['00080020'] && study._VALUE.attrs['00080020'].Value && study._VALUE.attrs['00080020'].Value[0]" href="" class="order_arrow" (click)="filter.orderby = 'StudyDate,StudyTime';queryStudies(0)" title="Order study by Date (descending)">
+                                            <span class="glyphicon glyphicon-triangle-top" aria-hidden="true" ></span>
+                                        </a>
+                                        <a *ngIf="study._VALUE.attrs['00080020'] && study._VALUE.attrs['00080020'].Value && study._VALUE.attrs['00080020'].Value[0]" href="" class="order_arrow" (click)="filter.orderby = '-StudyDate,-StudyTime';queryStudies(0)" title="Order study by Date (ascending)">
+                                            <span class="glyphicon glyphicon-triangle-bottom" aria-hidden="true"></span>
+                                        </a>
+                                    </div>
+                                </div>
+                                <div style="width:5.1%" class="td_cell hover_cell" ><div *ngIf="study._VALUE.attrs['00080030'] && study._VALUE.attrs['00080030'].Value && study._VALUE.attrs['00080030'].Value[0]" [innerHtml]="(study._VALUE.attrs['00080030'].Value[0] | formatTM) || '&nbsp;'"></div></div>
+                                <div style="width:10.2%" class="td_cell txt hover_cell"  >
+                                    <div *ngIf="study._VALUE.attrs['00080090'] && study._VALUE.attrs['00080090'].Value && study._VALUE.attrs['00080090'].Value[0] && study._VALUE.attrs['00080090'].Value[0].Alphabetic" tooltip="{{study._VALUE.attrs['00080090'].Value[0].Alphabetic}}">{{(study._VALUE.attrs['00080090'].Value[0].Alphabetic) || '&nbsp;'}}</div>
+                                </div>
+                                <div class="td_cell txt hover_cell" ><div *ngIf="study._VALUE.attrs['00080050'] && study._VALUE.attrs['00080050'].Value && study._VALUE.attrs['00080050'].Value[0]" tooltip="{{study._VALUE.attrs['00080050'].Value[0]}}"  >{{(study._VALUE.attrs['00080050'].Value[0]) || '&nbsp;'}}</div></div>
+                                <div style="width:5.2%" class="td_cell hover_cell">
+                                    <div [innerHtml]="(study._VALUE.attrs['00080061'] | formatAttributeValue) || '&nbsp;'" *ngIf="study._VALUE.attrs['00080061'] && study._VALUE.attrs['00080061'].Value">&nbsp;</div>
+                                </div>
+                                <div style="width:17%" class="td_cell txt hover_cell" ><div tooltip="{{study._VALUE.attrs['00081030'].Value[0]}}" *ngIf="study._VALUE.attrs['00081030'] && study._VALUE.attrs['00081030'].Value && study._VALUE.attrs['00081030'].Value[0]">{{(study._VALUE.attrs['00081030'].Value[0]) || '&nbsp;'}}</div></div>
+                                <div style="width:3%" class="td_cell txt hover_cell"  ><div *ngIf="study._VALUE.attrs['00201206'] && study._VALUE.attrs['00201206'].Value && study._VALUE.attrs['00201206'].Value[0]" tooltip="{{study._VALUE.attrs['00201206'].Value[0]}}">{{(study._VALUE.attrs['00201206'].Value[0]) || '&nbsp;'}}</div></div>
+                                <div style="width:3%" class="td_cell txt hover_cell" ><div *ngIf="study._VALUE.attrs['00201208'] && study._VALUE.attrs['00201208'].Value && study._VALUE.attrs['00201208'].Value[0]" tooltip="{{study._VALUE.attrs['00201208'].Value[0]}}">{{(study._VALUE.attrs['00201208'].Value[0]) || '&nbsp;'}}</div></div>
+                            </div>
+                            <div class="td_row">
+                                <div class="tr_row"  *ngIf="study._VALUE.showAttributes">
+                                    <div class="td_cell attribute_list" id="{{patient._VALUE.attrs['00100020'].Value[0] | removedots}}{{study._VALUE.attrs['0020000D'].Value[0] | removedots}}"> 
+                                        <attribute-list *ngIf="study._VALUE.attrs" [attrs]="study._VALUE.attrs"></attribute-list>
+                                    </div>
+                                </div>
+                                <div class="repeat2" *ngFor="let series of study._VALUE.series | getKey" contextmenu-item="series" >
+                                    <div class="subblock">
+                                        <div class="more_menu_content">
+                                            <div class="more_menu_study">
+                                                <div class="td_cell colcell" [innerHtml]="series._VALUE.offset+1+'.'"> </div>
+                                                <div class="exeq_buttons" >
+                                                    <div class="morefunction" title="Show more functions" (click)="showMoreFunction($event)"></div>
+                                                    <a class="hiddenbuttons" (click)="exportSeries(series._VALUE)" *ngIf="exporterID && isRole('admin')" href="" title="Export Series">
+                                                        <span class="glyphicon glyphicon-export"></span>
+                                                    </a>
+                                                    <a class="hiddenbuttons" [hidden]="trashaktive || !isRole('admin') ||  series._VALUE.attrs['00201209'].Value[0] === 0" (click)="rejectSeries(series._VALUE)" href="" title="Reject Series">
+                                                        <span  class="glyphicon glyphicon-trash"></span>
+                                                    </a>
+                                                    <a class="hiddenbuttons" *ngIf="trashaktive && isRole('admin')" (click)="rejectSeries(series._VALUE)" href="" title="Restore Series">
+                                                        <span class="glyphicon glyphicon-repeat"></span>
+                                                    </a>
+                                                    <a class="hiddenbuttons" (click)="$event.preventDefault();storageCommitmen('series', series._VALUE)" *ngIf="isRole('admin')" href="" title="Verify storage commitmen">
+                                                        <span class="glyphicon glyphicon-ok"></span>
+                                                    </a>
+                                                    <!--<a class="hiddenbuttons" ng-click="storageCommitmen('series', series)" ng-show="user.isRole('admin')" href="" title="Verify storage commitmen">-->
+                                                        <!--<span class="glyphicon glyphicon-ok"></span>-->
+                                                    <!--</a>-->
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="tr_row repeat2_hover" (click)='select(series._VALUE,"series", {patientkey:patient._KEY,"study._KEY":study._KEY, "serieskey":series._KEY})' [ngClass]="{selected: series._VALUE.selected}">
+                                            <div class="td_cell table_btn">
+                                                <a (click)="$event.preventDefault();series._VALUE.showAttributes = !series._VALUE.showAttributes" href="" title="Show Attributes">
+                                                    <span class="glyphicon glyphicon-th-list"></span>
+                                                </a>
+
+                                                <a *ngIf="!series._VALUE.instances" (click)="$event.preventDefault();queryInstances(series._VALUE,0)" href="" title="Show Instances">&#9658;</a>
+                                                <a *ngIf="series._VALUE.instances" (click)="$event.preventDefault();series._VALUE.instances = null" href="" title="Hide Instances">&#9660;</a>
+                                            </div>
+                                            <div class="td_cell txt hover_cell"><div *ngIf="series._VALUE.attrs['00081010'] && series._VALUE.attrs['00081010'].Value && series._VALUE.attrs['00081010'].Value[0]" tooltip="{{series._VALUE.attrs['00081010'].Value[0]}}" >{{(series._VALUE.attrs['00081010'].Value[0]) || '&nbsp;'}}</div></div>
+                                            <div class="td_cell txt hover_cell"><div *ngIf="series._VALUE.attrs['00200011'] && series._VALUE.attrs['00200011'].Value && series._VALUE.attrs['00200011'].Value[0]" tooltip="{{series._VALUE.attrs['00200011'].Value[0]}}" >{{(series._VALUE.attrs['00200011'].Value[0]) || '&nbsp;'}}</div></div>
+                                            <div class="td_cell txt hover_cell"><div *ngIf="series._VALUE.attrs['00400244'] && series._VALUE.attrs['00400244'].Value && series._VALUE.attrs['00400244'].Value[0]" tooltip="{{series._VALUE.attrs['00400244'].Value[0]}}" >{{(series._VALUE.attrs['00400244'].Value[0] | formatDA) || '&nbsp;'}}</div></div>
+                                            <div class="td_cell txt hover_cell"><div *ngIf="series._VALUE.attrs['00400245'] && series._VALUE.attrs['00400245'].Value && series._VALUE.attrs['00400245'].Value[0]" tooltip="{{series._VALUE.attrs['00400245'].Value[0]}}" >{{(series._VALUE.attrs['00400245'].Value[0] | formatTM) || '&nbsp;'}}</div></div>
+                                            <div class="td_cell txt hover_cell"><div *ngIf="series._VALUE.attrs['00180015'] && series._VALUE.attrs['00180015'].Value && series._VALUE.attrs['00180015'].Value[0]" tooltip="{{series._VALUE.attrs['00180015'].Value[0]}}" >{{(series._VALUE.attrs['00180015'].Value[0]) || '&nbsp;'}}</div></div>
+                                            <div class="td_cell hover_cell"><div *ngIf="series._VALUE.attrs['00080060'] && series._VALUE.attrs['00080060'].Value && series._VALUE.attrs['00080060'].Value[0]" [innerHtml]="(series._VALUE.attrs['00080060'].Value[0]) || '&nbsp;'" ></div></div>
+                                            <div style="width:21.5%" class="td_cell txt hover_cell" ><div *ngIf="series._VALUE.attrs['0008103E'] && series._VALUE.attrs['0008103E'].Value && series._VALUE.attrs['0008103E'].Value[0]" tooltip="{{(series._VALUE.attrs['0008103E'].Value[0]) || '&nbsp;'}}">{{(series._VALUE.attrs['0008103E'].Value[0]) || '&nbsp;'}}</div></div>
+                                            <div style="width:2.1%" class="td_cell txt hover_cell" ><div *ngIf="series._VALUE.attrs['00201209'] && series._VALUE.attrs['00201209'].Value && series._VALUE.attrs['00201209'].Value[0]">{{(series._VALUE.attrs['00201209'].Value[0]) || '&nbsp;'}}</div></div>
+                                        </div>
+                                        <div class="tr_row"  *ngIf="series._VALUE.showAttributes">
+                                            <div class="td_cell attribute_list">
+                                                <attribute-list *ngIf="series._VALUE.attrs" [attrs]="series._VALUE.attrs"></attribute-list>
+                                            </div>
+                                        </div>
+                                        <div class="repeat3" *ngFor="let instance of series._VALUE.instances | getKey" contextmenu-item="instance">
+                                            <div class="more_menu_content">
+                                                <div class="more_menu_study">
+                                                    <div class="td_cell colcell" [innerHtml]="instance._VALUE.offset+1+'.'"> </div>
+                                                    <div class="exeq_buttons">
+                                                        <div class="morefunction" title="Show more functions" (click)="showMoreFunction($event)"></div>
+                                                        <a class="hiddenbuttons" (click)="$event.preventDefault();exportInstance(instance._VALUE)" *ngIf="exporterID && isRole('admin')" href="" title="Export instance">
+                                                            <span class="glyphicon glyphicon-export"></span>
+                                                        </a>
+                                                        <a class="hiddenbuttons" [hidden]="trashaktive || !isRole('admin')" (click)="$event.preventDefault();rejectInstance(instance._VALUE)" href="" title="Reject instance">
+                                                            <span  class="glyphicon glyphicon-trash"></span>
+                                                        </a>
+                                                        <a class="hiddenbuttons" *ngIf="trashaktive && isRole('admin')" (click)="$event.preventDefault();rejectInstance(instance._VALUE)" href="" title="Restore instance">
+                                                            <span class="glyphicon glyphicon-repeat"></span>
+                                                        </a>
+                                                        <a class="hiddenbuttons" (click)="$event.preventDefault();storageCommitmen('instance', instance._VALUE)" *ngIf="isRole('admin')" href="" title="Verify storage commitmen">
+                                                            <span class="glyphicon glyphicon-ok"></span>
+                                                        </a>
+                                                        <a class="hiddenbuttons" href="{{downloadURL(instance._VALUE)}}" title="Download Uncompressed DICOM Object">
+                                                            <span class="glyphicon glyphicon-save"></span>
+                                                        </a>
+                                                        <a class="hiddenbuttons" href="{{downloadURL(instance._VALUE, '*')}}" title="Download DICOM Object">
+                                                            <span class="glyphicon glyphicon-download-alt"></span>
+                                                        </a>
+                                                        <a class="hiddenbuttons" [hidden]="instance._VALUE.views.length > 1" (click)="$event.preventDefault();viewInstance(instance._VALUE)" href="#" title="View DICOM Object">
+                                                            <span class="glyphicon glyphicon-picture"></span>
+                                                        </a>
+                                                        <span class="selecta hiddenbuttons" *ngIf="instance._VALUE.views.length > 1" href="" title="View DICOM Object">
+                                                            <span class="glyphicon glyphicon-picture" (click)="select_show = !select_show"></span>
+                                                            <div *ngIf="select_show" class="select_block" (click)="select_show = false">
+                                                                <a [(ngModel)]="instance._VALUE.view" *ngFor="let value of instance._VALUE.views" (click)="(instance._VALUE.view=value);viewInstance(instance._VALUE)">{{value}}</a>
+                                                            </div>
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="subblock">
+                                                <div class="tr_row repeat3_hover" (click)='select(instance._VALUE,"instance", {patientkey:patient._KEY,"study._KEY":study._KEY, "serieskey":series._KEY, "instancekey":instance._KEY})' [ngClass]="{selected: instance._VALUE.selected}" >
+                                                    <div class="td_cell table_btn">
+                                                        <!-- <input type="checkbox" [(ngModel)]="instance._VALUE.selected" class="selectcheckboxes" /> -->
+                                                        <a (click)="$event.preventDefault();toggleAttributs(series._VALUE.instances[instance._KEY],'attributs')" href="" title="Show Attributes" [ngClass]="{active:instance._VALUE.showAttributes}">
+                                                            <span class="glyphicon glyphicon-th-list"></span>
+                                                        </a>
+                                                        <a (click)="$event.preventDefault();toggleAttributs(series._VALUE.instances[instance._KEY],'fileattributs')" href="" title="Show Attributes from file" [ngClass]="{active:instance._VALUE.showFileAttributes}">
+                                                            <span class="glyphicon glyphicon-list"></span>
+                                                        </a>
+
+                                                    </div>
+                                                    <div class="td_cell txt hover_cell"  ><div *ngIf="instance._VALUE.attrs['00080016'] && instance._VALUE.attrs['00080016'].Value && instance._VALUE.attrs['00080016'].Value[0]" tooltip="{{instance._VALUE.attrs['00080016'].Value[0]}}" >{{(instance._VALUE.attrs['00080016'].Value[0]) || '&nbsp;'}}</div></div>
+                                                    <div class="td_cell txt hover_cell"  ><div *ngIf="instance._VALUE.attrs['00200013'] && instance._VALUE.attrs['00200013'].Value && instance._VALUE.attrs['00200013'].Value[0]" tooltip="{{instance._VALUE.attrs['00200013'].Value[0]}}" >{{(instance._VALUE.attrs['00200013'].Value[0]) || '&nbsp;'}}</div></div>
+                                                    <div class="td_cell hover_cell" ><div *ngIf="(instance._VALUE.attrs['00080023'] && instance._VALUE.attrs['00080023'].Value && instance._VALUE.attrs['00080023'].Value[0]) || (instance._VALUE.attrs['00700082'] && instance._VALUE.attrs['00700082'].Value && instance._VALUE.attrs['00700082'].Value[0])">{{((instance._VALUE.attrs['00080023'] || instance._VALUE.attrs['00700082']).Value[0] | formatDA) || '&nbsp;'}}</div></div>
+                                                    <div class="td_cell hover_cell" ><div *ngIf="(instance._VALUE.attrs['00080033'] && instance._VALUE.attrs['00080033'].Value && instance._VALUE.attrs['00080033'].Value[0]) || (instance._VALUE.attrs['00700083'] && instance._VALUE.attrs['00700083'].Value && instance._VALUE.attrs['00700083'].Value[0])">{{((instance._VALUE.attrs['00080033'] || instance._VALUE.attrs['00700083']).Value[0] | formatTM) || '&nbsp;'}}</div></div>
+                                                    <div style="width:28%" class="td_cell txt hover_cell" tooltip="{{(instance._VALUE.attrs | contentDescription)}}" [innerHtml]="instance._VALUE.attrs | contentDescription"></div>
+                                                    <div style="width:2.7%" class="td_cell hover_cell" ></div>
+                                                </div>
+                                                <div class="tr_row"  *ngIf="instance._VALUE.showAttributes">
+                                                    <div class="td_cell attribute_list">
+                                                        <attribute-list [attrs]="instance._VALUE.attrs"></attribute-list>
+                                                    </div>
+                                                </div>
+                                                <div class="tr_row"  *ngIf="instance._VALUE.showFileAttributes">
+                                                    <div class="td_cell attribute_list file-attribute-list" id="file-attribute-list-{{instance._VALUE.attrs['00080018'].Value[0] | removedots}}">
+                                                         <file-attribute-list  [studyuid]="instance._VALUE.wadoQueryParams.studyUID" [seriesuid]="instance._VALUE.wadoQueryParams.seriesUID" [objectuid]="instance._VALUE.wadoQueryParams.objectUID" [aet]="aet"></file-attribute-list>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="arrows" *ngIf="series._VALUE.instances && series._VALUE.instances.length">
+                                        <div class="arrows_block">
+                                            <button class="btn btn-link btn-xs"
+                                                    [disabled]="series._VALUE.instances[0].offset==0"
+                                                    (click)="queryInstances(series._VALUE, series._VALUE.instances[0].offset-limit)"
+                                                    title="Previous Instances">
+                                                <span class="glyphicon glyphicon-menu-left"></span>
+                                            </button>
+                                            <button class="btn btn-link btn-xs"
+                                                    [disabled]="!series._VALUE.moreInstances"
+                                                    (click)="queryInstances(series._VALUE, series._VALUE.instances[0].offset+limit)"
+                                                    title="Next Instances">
+                                                <span class="glyphicon glyphicon-menu-right"></span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div><!--  -->
+                            </div>
+                            <div class="arrows" *ngIf="study._VALUE.series && study._VALUE.series.length">
+                                    <!--length={{study._VALUE.series.length}}-->
+                                <div class="arrows_block">
+                                    <button class="btn btn-link btn-xs"
+                                            [disabled]="study._VALUE.series[0].offset === 0"
+                                            (click)="querySeries(study._VALUE, study._VALUE.series[0].offset-limit)"
+                                            title="Previous Series">
+                                        <span class="glyphicon glyphicon-menu-left"></span>
+                                    </button>
+                                    <button class="btn btn-link btn-xs"
+                                            [disabled]="!study._VALUE.moreSeries"
+                                            (click)="querySeries(study._VALUE, study._VALUE.series[0].offset+limit)"
+                                            title="Next Series">
+                                        <span class="glyphicon glyphicon-menu-right"></span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="repeat1" *ngFor="let mwl of patient._VALUE.mwls | getKey" >
+                <div class="tbody">
+                    <div class="tr_row">
+                        <div class="colcell" [innerHtml]="mwl._VALUE.offset+1+'.'"> </div>
+                        <div class="subblock">
+                            <div class="td_row thead repeat4_hover">
+                                <div class="td_cell table_btn">
+                                    <a (click)="$event.preventDefault();mwl._VALUE.showAttributes = !mwl._VALUE.showAttributes" href="" title="Show Attributes">
+                                        <span class="glyphicon glyphicon-th-list"></span>
+                                    </a>
+                                    <a *ngIf="isRole('admin')" (click)="$event.preventDefault();editmwl(patients[patient._KEY], patient._KEY, mwl._KEY, mwl._VALUE)" href="" title="Edit mwl">
+                                        <span class="glyphicon glyphicon-pencil"></span>
+                                    </a>
+                                    <a *ngIf="isRole('admin')" (click)="$event.preventDefault();deletemwl._VALUE(mwl._VALUE)" href="" title="Delete mwl._VALUE">
+                                        <span class="glyphicon glyphicon-remove"></span>
+                                    </a>
+                                </div>
+                                <div style="width:10.4%" class="td_cell txt hover_cell" ><div *ngIf="mwl._VALUE.attrs['00401001'] && mwl._VALUE.attrs['00401001'].Value && mwl._VALUE.attrs['00401001'].Value[0]" tooltip="{{mwl._VALUE.attrs['00401001'].Value[0]}}">{{(mwl._VALUE.attrs['00401001'].Value[0]) || '&nbsp;'}}</div></div>
+                                <div  style="width:17.3%"  class="td_cell txt hover_cell" ><div *ngIf="mwl._VALUE.attrs['0020000D'] && mwl._VALUE.attrs['0020000D'].Value && mwl._VALUE.attrs['0020000D'].Value[0]" tooltip="{{mwl._VALUE.attrs['0020000D'].Value[0]}}">{{(mwl._VALUE.attrs['0020000D'].Value[0]) || '&nbsp;'}}</div></div>
+                                <div class="td_cell txt hover_cell"  >
+                                    <div *ngIf="mwl._VALUE.attrs['00400100'] && mwl._VALUE.attrs['00400100'].Value && mwl._VALUE.attrs['00400100'].Value[0] && mwl._VALUE.attrs['00400100'].Value[0]['00400002'] &&  mwl._VALUE.attrs['00400100'].Value[0]['00400002'].Value && mwl._VALUE.attrs['00400100'].Value[0]['00400002'].Value[0]" tooltip="{{mwl._VALUE.attrs['00400100'].Value[0]['00400002'].Value[0]}}">
+                                        {{(mwl._VALUE.attrs['00400100'].Value[0]['00400002'].Value[0] | formatDA) || '&nbsp;'}}
+                                    </div>
+                                </div>
+                                <div style="width:5.1%" class="td_cell hover_cell">
+                                    <div *ngIf="mwl._VALUE.attrs['00400100'] && mwl._VALUE.attrs['00400100'].Value && mwl._VALUE.attrs['00400100'].Value[0] && mwl._VALUE.attrs['00400100'].Value[0]['00400003'] &&  mwl._VALUE.attrs['00400100'].Value[0]['00400003'].Value && mwl._VALUE.attrs['00400100'].Value[0]['00400003'].Value[0]">
+                                        {{(mwl._VALUE.attrs['00400100'].Value[0]['00400003'].Value[0] | formatTM) || '&nbsp;'}}
+                                    </div>
+                                </div>
+                                <div style="width:10.2%" class="td_cell txt hover_cell"  >
+                                    <div  *ngIf="mwl._VALUE.attrs['00400100'] && mwl._VALUE.attrs['00400100'].Value && mwl._VALUE.attrs['00400100'].Value[0] && mwl._VALUE.attrs['00400100'].Value[0]['00400006'] &&  mwl._VALUE.attrs['00400100'].Value[0]['00400006'].Value && mwl._VALUE.attrs['00400100'].Value[0]['00400006'].Value[0] && mwl._VALUE.attrs['00400100'].Value[0]['00400006'].Value[0].Alphabetic" tooltip="{{mwl._VALUE.attrs['00400100'].Value[0]['00400006'].Value[0].Alphabetic}}">
+                                        {{(mwl._VALUE.attrs['00400100'].Value[0]['00400006'].Value[0].Alphabetic) || '&nbsp;'}}
+                                    </div>
+                                </div>
+                                <div class="td_cell txt hover_cell" >
+                                    <div *ngIf="mwl._VALUE.attrs['00080050'] && mwl._VALUE.attrs['00080050'].Value && mwl._VALUE.attrs['00080050'].Value[0]" tooltip="{{mwl._VALUE.attrs['00080050'].Value[0]}}" >
+                                        {{(mwl._VALUE.attrs['00080050'].Value[0]) || '&nbsp;'}}
+                                    </div>
+                                </div>
+                                <div style="width:5.2%" class="td_cell hover_cell">
+                                    <div *ngIf="mwl._VALUE.attrs['00400100'] && mwl._VALUE.attrs['00400100'].Value && mwl._VALUE.attrs['00400100'].Value[0] && mwl._VALUE.attrs['00400100'].Value[0]['00080060'] &&  mwl._VALUE.attrs['00400100'].Value[0]['00080060'].Value && mwl._VALUE.attrs['00400100'].Value[0]['00080060'].Value[0]">
+                                        {{(mwl._VALUE.attrs['00400100'].Value[0]['00080060'].Value[0]) || '&nbsp;'}}
+                                    </div>
+                                </div>
+                                <div style="width:18%" class="td_cell txt hover_cell" >
+                                    <div  *ngIf="(mwl._VALUE.attrs['00400100'] && mwl._VALUE.attrs['00400100'].Value && mwl._VALUE.attrs['00400100'].Value[0] && mwl._VALUE.attrs['00400100'].Value[0]['00400007'] &&  mwl._VALUE.attrs['00400100'].Value[0]['00400007'].Value && mwl._VALUE.attrs['00400100'].Value[0]['00400007'].Value[0]) ||
+                                                   (mwl._VALUE.attrs['00400100'] && mwl._VALUE.attrs['00400100'].Value && mwl._VALUE.attrs['00400100'].Value[0] && mwl._VALUE.attrs['00400100'].Value[0]['00400008'] &&  mwl._VALUE.attrs['00400100'].Value[0]['00400008'].Value && mwl._VALUE.attrs['00400100'].Value[0]['00400008'].Value[0] && mwl._VALUE.attrs['00400100'].Value[0]['00400008'].Value[0]['00080104'] && mwl._VALUE.attrs['00400100'].Value[0]['00400008'].Value[0]['00080104'].Value && mwl._VALUE.attrs['00400100'].Value[0]['00400008'].Value[0]['00080104'].Value[0])"
+                                            tooltip="{{mwl._VALUE.attrs['00400100'].Value[0]['00400007'].Value[0] || mwl._VALUE.attrs['00400100'].Value[0]['00400008'].Value[0]['00080104'].Value[0]}}">
+
+                                        {{(mwl._VALUE.attrs['00400100'].Value[0]['00400007'].Value[0]) || (mwl._VALUE.attrs['00400100'].Value[0]['00400008'].Value[0]['00080104'].Value[0]) || '&nbsp;'}}
+                                    </div>
+                                </div>
+                                <div style="width:6%" class="td_cell txt hover_cell" >
+                                    <div *ngIf="mwl._VALUE.attrs['00400100'] && mwl._VALUE.attrs['00400100'].Value && mwl._VALUE.attrs['00400100'].Value[0] && mwl._VALUE.attrs['00400100'].Value[0]['00400001'] &&  mwl._VALUE.attrs['00400100'].Value[0]['00400001'].Value && mwl._VALUE.attrs['00400100'].Value[0]['00400001'].Value[0]" tooltip="{{mwl._VALUE.attrs['00400100'].Value[0]['00400001'].Value[0]}}">
+                                        {{(mwl._VALUE.attrs['00400100'].Value[0]['00400001'].Value[0]) || '&nbsp;'}}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="td_row">
+                                <div class="tr_row"  *ngIf="mwl._VALUE.showAttributes">
+                                    <div class="td_cell attribute_list" id="{{patient._VALUE.attrs['00100020'].Value[0] | removedots}}{{mwl._VALUE.attrs['0020000D'].Value[0] | removedots}}"> 
+                                        <!--<attribute-list attrs="mwl._VALUE.attrs"></attribute-list>-->attribute-list
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="arrows" *ngIf="mwl._VALUE.series && mwl._VALUE.series.length">
+                                <div class="arrows_block">
+                                    <button class="btn btn-link btn-xs"
+                                            [disabled]="mwl._VALUE.series[0].offset==0"
+                                            (click)="querySeries(mwl._VALUE, mwl._VALUE.series[0].offset-limit)"
+                                            title="Previous Series">
+                                        <span class="glyphicon glyphicon-menu-left"></span>
+                                    </button>
+                                    <button class="btn btn-link btn-xs"
+                                            [disabled]="!mwl._VALUE.moreSeries"
+                                            (click)="querySeries(mwl._VALUE, mwl._VALUE.series[0].offset+limit)"
+                                            title="Next Series">
+                                        <span class="glyphicon glyphicon-menu-right"></span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+            <div class="arrows" *ngIf="patient._VALUE && patient._VALUE.studies && patient._VALUE.studies[0] && patient._VALUE.studies[0].fromAllStudies">
+                <div class="arrows_block">
+                    <button class="btn btn-link btn-xs"
+                            [disabled]="patient._VALUE && patient._VALUE.studies && patient._VALUE.studies[0] && patient._VALUE.studies[0].offset===0"
+                            (click)="queryAllStudiesOfPatient(patient._VALUE, patient._VALUE[0]?.offset-limit, $event)"
+                            title="Previous studies">
+                        <span class="glyphicon glyphicon-menu-left"></span>
+                    </button>
+                    <button class="btn btn-link btn-xs"
+                            [disabled]="!patient._VALUE.moreStudies"
+                            (click)="queryAllStudiesOfPatient(patient._VALUE, patient._VALUE[0]?.offset+limit, $event)"
+                            title="Next studies">
+                        <span class="glyphicon glyphicon-menu-right"></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="arrows">
+        <div class="arrows_block" *ngIf="morePatients || (patients[0] && patients[0].offset && patients[0].offset != 0)" >
+            <button class="btn btn-link btn-xs"
+                    [disabled]="!patients[0] || !patients[0].offset || patients[0].offset === 0"
+                    (click)="queryPatients(patients[0].offset-limit);addEffect('left')"
+                    title="Previous Patients">
+                <span class="glyphicon glyphicon glyphicon-chevron-left"></span>
+            </button>
+            <button class="btn btn-link btn-xs"
+                    [disabled]="!morePatients"
+                    (click)="queryPatients(patients[0].offset+limit);addEffect('right')"
+                    title="Next Patients">
+                <span class="glyphicon glyphicon glyphicon-chevron-right"></span>
+            </button> 
+        </div>
+        <div class="arrows_block" *ngIf="(moreStudies || (patients[0] && patients[0].studies && patients[0].studies[0] && patients[0].studies[0].offset != 0)) && filterMode === 'study'" >
+            <button class="btn btn-link btn-xs"
+                    [disabled]="!patients[0] || !patients[0].studies || !patients[0].studies[0] || patients[0].studies[0].offset === 0"
+                    (click)="queryStudies(patients[0].studies[0].offset-limit);addEffect('left')"
+                    title="Previous Studies">
+                <span class="glyphicon glyphicon glyphicon-chevron-left"></span>
+            </button>
+            <button class="btn btn-link btn-xs"
+                    [disabled]="!moreStudies"
+                    (click)="queryStudies(patients[0].studies[0].offset+limit);addEffect('right')"
+                    title="Next Studies">
+                <span class="glyphicon glyphicon glyphicon-chevron-right"></span>
+            </button> 
+        </div>
+        <div class="arrows_block" *ngIf="moreMWL" >
+            <button class="btn btn-link btn-xs"
+                    [disabled]="patients[0].mwls[0].offset === 0"
+                    (click)="queryMWL(patients[0].mwls[0].offset-limit);addEffect('left')"
+                    title="Previous MWL">
+                <span class="glyphicon glyphicon glyphicon-chevron-left"></span>
+            </button>
+            <button class="btn btn-link btn-xs"
+                    [disabled]="!moreMWL"
+                    (click)="queryMWL(patients[0].mwls[0].offset+limit);addEffect('right')"
+                    title="Next MWL">
+                <span class="glyphicon glyphicon glyphicon-chevron-right"></span>
+            </button> 
+        </div>
+    </div>
+</div>
+</div>

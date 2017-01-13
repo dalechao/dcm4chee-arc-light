@@ -7,16 +7,10 @@ import java.util.Calendar;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
+ * @author Vrinda Nayak <vrinda.nayak@j4care.com>
  * @since Oct 2015
  */
 public class ExportRule {
-
-    public ExportRule() {
-    }
-
-//    private final String commonName;
-
-
 
     private String commonName;
 
@@ -30,9 +24,10 @@ public class ExportRule {
 
     private Duration exportDelay;
 
-//    public ExportRule(String commonName) {
-//        this.commonName = commonName;
-//    }
+    private boolean exportPreviousEntity;
+
+    public ExportRule() {
+    }
 
     public ExportRule(String commonName) {
         setCommonName(commonName);
@@ -96,6 +91,14 @@ public class ExportRule {
 
     public boolean match(String hostName, String sendingAET, String receivingAET, Attributes attrs, Calendar cal) {
         return match(cal) && conditions.match(hostName, sendingAET, receivingAET, attrs);
+    }
+
+    public boolean isExportPreviousEntity() {
+        return exportPreviousEntity;
+    }
+
+    public void setExportPreviousEntity(boolean exportPreviousEntity) {
+        this.exportPreviousEntity = exportPreviousEntity;
     }
 
     private boolean match(Calendar cal) {

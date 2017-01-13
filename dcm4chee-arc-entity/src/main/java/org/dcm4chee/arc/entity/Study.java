@@ -46,17 +46,19 @@ import org.dcm4che3.soundex.FuzzyStr;
 import org.dcm4che3.util.DateUtils;
 import org.dcm4che3.util.StringUtils;
 import org.dcm4chee.arc.conf.AttributeFilter;
+import org.dcm4chee.arc.conf.Duration;
 
 import javax.persistence.*;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Date;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.util.*;
 
 /**
  * @author Damien Evans <damien.daddy@gmail.com>
  * @author Justin Falk <jfalkmu@gmail.com>
  * @author Gunter Zeilinger <gunterze@gmail.com>
  * @author Michael Backhaus <michael.backhaus@agfa.com>
+ * @author Vrinda Nayak <vrinda.nayak@j4care.com>
  */
 @NamedQueries({
 @NamedQuery(
@@ -82,6 +84,11 @@ import java.util.Date;
             "where st.storageIDs = ?1 " +
             "order by st.accessTime"),
 @NamedQuery(
+    name=Study.FIND_PK_BY_STORAGE_ID_AND_EXT_RETR_AET,
+    query="select st.pk from Study st " +
+            "where st.storageIDs = ?1 and st.externalRetrieveAET = ?2 " +
+            "order by st.accessTime"),
+@NamedQuery(
     name=Study.UPDATE_ACCESS_TIME,
     query="update Study st set st.accessTime = CURRENT_TIMESTAMP where st.pk = ?1"),
 @NamedQuery(
@@ -98,13 +105,22 @@ import java.util.Date;
 @NamedQuery(
     name=Study.COUNT_STUDIES_OF_PATIENT,
     query="select count(st) from Study st " +
-            "where st.patient = ?1")
+            "where st.patient = ?1"),
+@NamedQuery(
+    name=Study.GET_EXPIRED_STUDIES,
+    query="select st from Study st " +
+            "where st.expirationDate <= ?1"),
+@NamedQuery(
+    name = Study.FIND_BY_ACCESS_TIME_AND_ACCESS_CONTROL_ID,
+    query = "select st from Study st " +
+            "where st.accessControlID = ?1 and st.accessTime = ?2")
 })
 @Entity
 @Table(name = "study",
     uniqueConstraints = @UniqueConstraint(columnNames = "study_iuid"),
     indexes = {
         @Index(columnList = "access_time"),
+        @Index(columnList = "created_time"),
         @Index(columnList = "access_control_id"),
         @Index(columnList = "rejection_state"),
         @Index(columnList = "storage_ids"),
@@ -114,19 +130,26 @@ import java.util.Date;
         @Index(columnList = "study_desc"),
         @Index(columnList = "study_custom1"),
         @Index(columnList = "study_custom2"),
-        @Index(columnList = "study_custom3")
-})
+        @Index(columnList = "study_custom3"),
+        @Index(columnList = "expiration_date"),
+        @Index(columnList = "failed_retrieves"),
+        @Index(columnList = "failed_iuids"),
+        @Index(columnList = "ext_retrieve_aet")
+    })
 public class Study {
 
     public static final String FIND_BY_PATIENT = "Study.findByPatient";
     public static final String FIND_BY_STUDY_IUID = "Study.findByStudyIUID";
     public static final String FIND_BY_STUDY_IUID_EAGER = "Study.findByStudyIUIDEager";
     public static final String FIND_PK_BY_STORAGE_ID_ORDER_BY_ACCESS_TIME = "Study.findPkByStorageIDOrderByAccessTime";
+    public static final String FIND_PK_BY_STORAGE_ID_AND_EXT_RETR_AET = "Study.findPkByStorageIDAndExtRetrAET";
     public static final String UPDATE_ACCESS_TIME = "Study.UpdateAccessTime";
     public static final String SET_FAILED_SOP_INSTANCE_UID_LIST = "Study.SetFailedSOPInstanceUIDList";
     public static final String INCREMENT_FAILED_RETRIEVES = "Study.IncrementFailedRetrieves";
     public static final String CLEAR_FAILED_SOP_INSTANCE_UID_LIST = "Study.ClearFailedSOPInstanceUIDList";
     public static final String COUNT_STUDIES_OF_PATIENT = "Study.CountStudiesOfPatient";
+    public static final String GET_EXPIRED_STUDIES = "Study.GetExpiredStudies";
+    public static final String FIND_BY_ACCESS_TIME_AND_ACCESS_CONTROL_ID = "Study.FindByAccessTimeAndAccessControlID";
 
     @Id
     @GeneratedValue(strategy=GenerationType.IDENTITY)
@@ -149,10 +172,15 @@ public class Study {
 
     @Basic(optional = false)
     @Temporal(TemporalType.TIMESTAMP)
+    @Column(name = "modified_time")
+    private Date modifiedTime;
+
+    @Basic(optional = false)
+    @Temporal(TemporalType.TIMESTAMP)
     @Column(name = "access_time")
     private Date accessTime;
 
-    @Basic(optional = false)
+    @Basic
     @Column(name = "storage_ids")
     private String storageIDs;
 
@@ -207,6 +235,13 @@ public class Study {
     @Column(name = "rejection_state")
     private RejectionState rejectionState;
 
+    @Basic
+    @Column(name = "expiration_date")
+    private String expirationDate;
+
+    @Column(name = "ext_retrieve_aet")
+    private String externalRetrieveAET;
+
     @OneToOne(cascade = CascadeType.ALL, orphanRemoval = true, optional = false)
     @JoinColumn(name = "dicomattrs_fk")
     private AttributesBlob attributesBlob;
@@ -246,6 +281,7 @@ public class Study {
         createdTime = now;
         updatedTime = now;
         accessTime = now;
+        modifiedTime = now;
     }
 
     @PreUpdate
@@ -267,6 +303,10 @@ public class Study {
         return updatedTime;
     }
 
+    public Date getModifiedTime() {
+        return modifiedTime;
+    }
+
     public Date getAccessTime() {
         return accessTime;
     }
@@ -275,12 +315,40 @@ public class Study {
         this.accessTime = accessTime;
     }
 
-    public String getStorageIDs() {
-        return storageIDs;
+    public boolean updateAccessTime(Duration maxAccessTimeStaleness) {
+        if (maxAccessTimeStaleness == null)
+            return false;
+
+        Date now = new Date();
+        if (accessTime.getTime() + maxAccessTimeStaleness.getSeconds() * 1000 < now.getTime()) {
+            accessTime = now;
+            return true;
+        }
+        return false;
     }
 
-    public void setStorageIDs(String storageIDs) {
-        this.storageIDs = storageIDs;
+    public String[] getStorageIDs() {
+        return StringUtils.split(storageIDs, '\\');
+    }
+
+    public boolean addStorageID(String storageID) {
+        if (storageID.equals(storageIDs))
+            return false;
+
+        if (storageIDs == null) {
+            storageIDs = storageID;
+            return true;
+        }
+        TreeSet<String> set = new TreeSet<>(Arrays.asList(getStorageIDs()));
+        if (!set.add(storageID))
+            return false;
+
+        this.storageIDs = StringUtils.concat(set.toArray(new String[set.size()]), '\\');
+        return true;
+    }
+
+    public void clearStorageIDs() {
+        storageIDs = null;
     }
 
     public String getStudyInstanceUID() {
@@ -355,6 +423,37 @@ public class Study {
         this.rejectionState = rejectionState;
     }
 
+    public LocalDate getExpirationDate() {
+        return expirationDate != null ? LocalDate.parse(expirationDate, DateTimeFormatter.BASIC_ISO_DATE) : null;
+    }
+
+    public void setExpirationDate(LocalDate expirationDate) {
+        if (expirationDate != null) {
+            try {
+                this.expirationDate = DateTimeFormatter.BASIC_ISO_DATE.format(expirationDate);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        } else
+            this.expirationDate = null;
+    }
+
+    public String getFailedSOPInstanceUIDList() {
+        return failedSOPInstanceUIDList;
+    }
+
+    public void setFailedSOPInstanceUIDList(String failedSOPInstanceUIDList) {
+        this.failedSOPInstanceUIDList = failedSOPInstanceUIDList;
+    }
+
+    public String getExternalRetrieveAET() {
+        return externalRetrieveAET;
+    }
+
+    public void setExternalRetrieveAET(String externalRetrieveAET) {
+        this.externalRetrieveAET = externalRetrieveAET;
+    }
+
     public Collection<CodeEntity> getProcedureCodes() {
         if (procedureCodes == null)
             procedureCodes = new ArrayList<>();
@@ -399,6 +498,6 @@ public class Study {
             attributesBlob = new AttributesBlob(new Attributes(attrs, filter.getSelection()));
         else
             attributesBlob.setAttributes(new Attributes(attrs, filter.getSelection()));
+        modifiedTime = new Date();
     }
-
 }

@@ -41,18 +41,22 @@
 package org.dcm4chee.arc.impl;
 
 import org.dcm4che3.conf.api.IApplicationEntityCache;
+import org.dcm4che3.conf.api.hl7.IHL7ApplicationCache;
+import org.dcm4che3.net.Association;
+import org.dcm4che3.net.AssociationHandler;
 import org.dcm4che3.net.Device;
 import org.dcm4che3.net.hl7.HL7DeviceExtension;
 import org.dcm4che3.net.hl7.service.HL7Service;
 import org.dcm4che3.net.hl7.service.HL7ServiceRegistry;
+import org.dcm4che3.net.pdu.AAssociateAC;
+import org.dcm4che3.net.pdu.AAssociateRQ;
+import org.dcm4che3.net.pdu.UserIdentityAC;
 import org.dcm4che3.net.service.BasicCEchoSCP;
 import org.dcm4che3.net.service.DicomService;
 import org.dcm4che3.net.service.DicomServiceRegistry;
-import org.dcm4chee.arc.ArchiveService;
-import org.dcm4chee.arc.ArchiveServiceEvent;
-import org.dcm4chee.arc.LeadingCFindSCPQueryCache;
-import org.dcm4chee.arc.Scheduler;
+import org.dcm4chee.arc.*;
 import org.dcm4chee.arc.conf.ArchiveDeviceExtension;
+import org.dcm4chee.arc.entity.Patient;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
@@ -65,6 +69,7 @@ import javax.enterprise.event.Event;
 import javax.enterprise.inject.Instance;
 import javax.inject.Inject;
 import javax.servlet.http.HttpServletRequest;
+import java.io.IOException;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
@@ -90,7 +95,16 @@ public class ArchiveServiceImpl implements ArchiveService {
     private IApplicationEntityCache aeCache;
 
     @Inject
+    private IHL7ApplicationCache hl7AppCache;
+
+    @Inject
     private LeadingCFindSCPQueryCache leadingCFindSCPQueryCache;
+
+    @Inject
+    private MergeMWLCache mergeMWLCache;
+
+    @Inject
+    private StorePermissionCache storePermissionCache;
 
     @Inject
     private Device device;
@@ -100,6 +114,9 @@ public class ArchiveServiceImpl implements ArchiveService {
 
     @Resource
     private ManagedScheduledExecutorService scheduledExecutor;
+
+    @Inject
+    private AssociationHandler associationHandler;
 
     @Inject
     private Event<ArchiveServiceEvent> archiveServiceEvent;
@@ -121,6 +138,7 @@ public class ArchiveServiceImpl implements ArchiveService {
             device.setConnectionMonitor(connectionEventSource);
             device.setExecutor(executor);
             device.setScheduledExecutor(scheduledExecutor);
+            device.setAssociationHandler(associationHandler);
             serviceRegistry.addDicomService(echoscp);
             for (DicomService service : dicomServices) {
                 serviceRegistry.addDicomService(service);
@@ -184,6 +202,7 @@ public class ArchiveServiceImpl implements ArchiveService {
         for (Scheduler scheduler : schedulers) scheduler.reload();
         device.rebindConnections();
         aeCache.clear();
+        hl7AppCache.clear();
         configure();
         archiveServiceEvent.fire(new ArchiveServiceEvent(ArchiveServiceEvent.Type.RELOADED, request));
     }
@@ -191,9 +210,17 @@ public class ArchiveServiceImpl implements ArchiveService {
     private void configure() {
         ArchiveDeviceExtension arcdev = device.getDeviceExtension(ArchiveDeviceExtension.class);
         aeCache.setStaleTimeout(arcdev.getAECacheStaleTimeoutSeconds());
+        hl7AppCache.setStaleTimeout(arcdev.getAECacheStaleTimeoutSeconds());
         leadingCFindSCPQueryCache.setStaleTimeout(
                 arcdev.getLeadingCFindSCPQueryCacheStaleTimeoutSeconds() * 1000L);
         leadingCFindSCPQueryCache.setMaxSize(arcdev.getLeadingCFindSCPQueryCacheSize());
+        mergeMWLCache.setStaleTimeout(
+                arcdev.getMergeMWLCacheStaleTimeoutSeconds() * 1000L);
+        mergeMWLCache.setMaxSize(arcdev.getMergeMWLCacheSize());
+        storePermissionCache.setStaleTimeout(
+                arcdev.getStorePermissionCacheStaleTimeoutSeconds() * 1000L);
+        storePermissionCache.setMaxSize(arcdev.getStorePermissionCacheSize());
+        Patient.setShowPatientInfo(arcdev.showPatientInfoInSystemLog());
     }
 
 }

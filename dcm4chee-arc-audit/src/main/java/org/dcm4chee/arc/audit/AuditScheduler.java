@@ -41,6 +41,7 @@
 package org.dcm4chee.arc.audit;
 
 import org.dcm4che3.net.Device;
+import org.dcm4che3.net.audit.AuditLogger;
 import org.dcm4che3.util.StringUtils;
 import org.dcm4chee.arc.Scheduler;
 import org.dcm4chee.arc.conf.ArchiveDeviceExtension;
@@ -56,6 +57,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
@@ -72,6 +75,10 @@ public class AuditScheduler extends Scheduler {
 
     @Inject
     private AuditService service;
+
+    protected AuditScheduler() {
+        super(Mode.scheduleWithFixedDelay);
+    }
 
     @Override
     protected Logger log() {
@@ -92,39 +99,32 @@ public class AuditScheduler extends Scheduler {
         if (auditSpoolDir == null || duration == null)
             return;
 
-        Path dir = Paths.get(StringUtils.replaceSystemProperties(auditSpoolDir));
-        if (!Files.isDirectory(dir))
-            return;
+        HashMap<AuditLogger, Path> loggerDirectoryMap = service.getLoggerDirectoryMap();
+        for (Map.Entry<AuditLogger, Path> entry : loggerDirectoryMap.entrySet()) {
+            AuditLogger logger = entry.getKey();
+            Path dir = entry.getValue();
+            if (!Files.isDirectory(dir))
+                return;
 
-        final long maxLastModifiedTime = System.currentTimeMillis() - duration.getSeconds() * 1000L;
-        ArrayList<Path> pathList = new ArrayList<>();
-        try {
-            try (DirectoryStream<Path> dirStream = Files.newDirectoryStream(dir, new DirectoryStream.Filter<Path>() {
-                @Override
-                public boolean accept(Path file) throws IOException {
-                    return !file.getFileName().toString().endsWith(FAILED)
-                            && Files.getLastModifiedTime(file).toMillis() <= maxLastModifiedTime;
-                }
-            })) {
-                for (Path path : dirStream) {
-                    pathList.add(path);
-                }
-            }
-        } catch (IOException e) {
-            LOG.warn("Failed to access Audit Spool Directory - {}", dir, e);
-        }
-        for (Path path : pathList) {
+            final long maxLastModifiedTime = System.currentTimeMillis() - duration.getSeconds() * 1000L;
+            ArrayList<Path> pathList = new ArrayList<>();
             try {
-                service.aggregateAuditMessage(path);
-                Files.delete(path);
-            } catch (Exception e) {
-                LOG.warn("Failed to process Audit Spool File - {}", path, e);
-                try {
-                    Files.move(path, path.resolveSibling(path.getFileName().toString() + FAILED));
-                } catch (IOException e1) {
-                    LOG.warn("Failed to mark Audit Spool File - {} as failed", path, e);
+                try (DirectoryStream<Path> dirStream = Files.newDirectoryStream(dir, new DirectoryStream.Filter<Path>() {
+                    @Override
+                    public boolean accept(Path file) throws IOException {
+                        return !file.getFileName().toString().endsWith(FAILED)
+                                && Files.getLastModifiedTime(file).toMillis() <= maxLastModifiedTime;
+                    }
+                })) {
+                    for (Path path : dirStream) {
+                        pathList.add(path);
+                    }
                 }
+            } catch (IOException e) {
+                LOG.warn("Failed to access Audit Spool Directory - {}", dir, e);
             }
+            for (Path path : pathList)
+                service.auditAndProcessFile(logger, path);
         }
     }
 }

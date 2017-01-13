@@ -45,25 +45,33 @@ import org.dcm4che3.net.ApplicationEntity;
 import org.dcm4che3.net.Association;
 import org.dcm4che3.net.QueryOption;
 import org.dcm4che3.net.service.QueryRetrieveLevel2;
+import org.dcm4chee.arc.conf.Availability;
+import org.dcm4chee.arc.conf.QueryRetrieveView;
+import org.dcm4chee.arc.conf.RejectionNote;
 import org.dcm4chee.arc.entity.SeriesQueryAttributes;
 import org.dcm4chee.arc.entity.StudyQueryAttributes;
 import org.dcm4chee.arc.query.util.QueryParam;
 
 import javax.servlet.http.HttpServletRequest;
+import java.io.IOException;
 import java.util.Collection;
 import java.util.EnumSet;
+import java.util.List;
+import java.util.zip.ZipInputStream;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
+ * @author Vrinda Nayak <vrinda.nayak@j4care.com>
  * @since Aug 2015
  */
 public interface QueryService {
 
     QueryContext newQueryContextFIND(Association as, String sopClassUID, EnumSet<QueryOption> queryOpts);
 
-    QueryContext newQueryContextQIDO(HttpServletRequest httpRequest, ApplicationEntity ae, boolean fuzzyMatching);
+    QueryContext newQueryContextQIDO(
+            HttpServletRequest httpRequest, String searchMethod, ApplicationEntity ae, QueryParam queryParam);
 
-    Query createQuery(QueryRetrieveLevel2 qrLevel, QueryContext ctx);
+    Query createQuery(QueryContext ctx);
 
     Query createPatientQuery(QueryContext ctx);
 
@@ -73,15 +81,34 @@ public interface QueryService {
 
     Query createInstanceQuery(QueryContext ctx);
 
+    Query createMWLQuery(QueryContext ctx);
+
     Attributes getSeriesAttributes(Long seriesPk, QueryParam queryParam);
 
     StudyQueryAttributes calculateStudyQueryAttributes(Long studyPk, QueryParam queryParam);
 
-    SeriesQueryAttributes calculateSeriesQueryAttributes(Long seriesPk, QueryParam queryParam);
+    SeriesQueryAttributes calculateSeriesQueryAttributesIfNotExists(Long seriesPk, QueryParam queryParam);
+
+    SeriesQueryAttributes calculateSeriesQueryAttributes(Long seriesPk, QueryRetrieveView qrView);
 
     Attributes getStudyAttributesWithSOPInstanceRefs(
             String studyUID, ApplicationEntity ae, Collection<Attributes> seriesAttrs);
 
-    Attributes getStudyAttributesWithSOPInstanceRefs(
-            String studyUID, String seriesUID, String objectUID, ApplicationEntity ae, boolean availability);
+    Attributes createIAN(ApplicationEntity ae, String studyInstanceUID, String seriesInstanceUID,
+                         Availability instanceAvailability, String... retrieveAETs);
+
+    Attributes createRejectionNote(
+            ApplicationEntity ae, String studyUID, String seriesUID, String objectUID, RejectionNote rjNote);
+
+    Attributes createRejectionNote(Attributes sopInstanceRefs, RejectionNote rjNote);
+
+    Attributes createActionInfo(String studyIUID, String seriesIUID, String sopIUID, ApplicationEntity ae);
+
+    List<Object[]> getSeriesInstanceUIDs(String studyUID);
+
+    List<Object[]> getSOPInstanceUIDs(String studyUID);
+
+    List<Object[]> getSOPInstanceUIDs(String studyUID, String seriesUID);
+
+    ZipInputStream openZipInputStream(QueryContext ctx, String storageID, String storagePath) throws IOException;
 }

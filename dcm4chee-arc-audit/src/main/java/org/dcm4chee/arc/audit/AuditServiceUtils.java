@@ -40,21 +40,10 @@
 package org.dcm4chee.arc.audit;
 
 import org.dcm4che3.audit.*;
-import org.dcm4che3.data.UID;
-import org.dcm4che3.net.Device;
-import org.dcm4che3.net.audit.AuditLogger;
 import org.dcm4chee.arc.patient.PatientMgtContext;
 import org.dcm4chee.arc.query.QueryContext;
 import org.dcm4chee.arc.retrieve.RetrieveContext;
 import org.dcm4chee.arc.store.StoreContext;
-import org.keycloak.KeycloakSecurityContext;
-import org.keycloak.adapters.RefreshableKeycloakSecurityContext;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import javax.servlet.http.HttpServletRequest;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 
@@ -62,115 +51,86 @@ import java.util.*;
  * @author Vrinda Nayak <vrinda.nayak@j4care.com>
  * @since Feb 2016
  */
-public class AuditServiceUtils {
-    private static final Logger LOG = LoggerFactory.getLogger(AuditService.class);
-    static final String noValue = "<none>";
-    static final String keycloakClassName = "org.keycloak.KeycloakSecurityContext";
-    static final String studyDate = "StudyDate";
 
+class AuditServiceUtils {
     enum EventClass {
-        QUERY, DELETE, PERM_DELETE, STORE_WADOR, CONN_REJECT, RETRIEVE, APPLN_ACTIVITY, HL7
+        QUERY, DELETE, PERM_DELETE, STORE_WADOR, CONN_REJECT, RETRIEVE, APPLN_ACTIVITY, HL7, PROC_STUDY
     }
     enum EventType {
-        ITRF_WAD_P(EventClass.STORE_WADOR, AuditMessages.EventID.DICOMInstancesTransferred, AuditMessages.EventActionCode.Read, AuditMessages.EventOutcomeIndicator.Success,
+        WADO___URI(EventClass.STORE_WADOR, AuditMessages.EventID.DICOMInstancesTransferred, AuditMessages.EventActionCode.Read,
                 AuditMessages.RoleIDCode.Destination, AuditMessages.RoleIDCode.Source, true, false, false, null),
-        ITRF_WAD_E(EventClass.STORE_WADOR, AuditMessages.EventID.DICOMInstancesTransferred, AuditMessages.EventActionCode.Read, AuditMessages.EventOutcomeIndicator.MinorFailure,
-                AuditMessages.RoleIDCode.Destination, AuditMessages.RoleIDCode.Source, true, false, false, null),
-        ITRF_S_C_P(EventClass.STORE_WADOR, AuditMessages.EventID.DICOMInstancesTransferred, AuditMessages.EventActionCode.Create, AuditMessages.EventOutcomeIndicator.Success,
+        STORE_CREA(EventClass.STORE_WADOR, AuditMessages.EventID.DICOMInstancesTransferred, AuditMessages.EventActionCode.Create,
                 AuditMessages.RoleIDCode.Source, AuditMessages.RoleIDCode.Destination, true, false, false, null),
-        ITRF_S_C_E(EventClass.STORE_WADOR, AuditMessages.EventID.DICOMInstancesTransferred, AuditMessages.EventActionCode.Create, AuditMessages.EventOutcomeIndicator.MinorFailure,
-                AuditMessages.RoleIDCode.Source, AuditMessages.RoleIDCode.Destination, true, false, false, null),
-        ITRF_S_U_P(EventClass.STORE_WADOR, AuditMessages.EventID.DICOMInstancesTransferred, AuditMessages.EventActionCode.Update, AuditMessages.EventOutcomeIndicator.Success,
-                AuditMessages.RoleIDCode.Source, AuditMessages.RoleIDCode.Destination, true, false, false, null),
-        ITRF_S_U_E(EventClass.STORE_WADOR, AuditMessages.EventID.DICOMInstancesTransferred, AuditMessages.EventActionCode.Update, AuditMessages.EventOutcomeIndicator.MinorFailure,
+        STORE_UPDT(EventClass.STORE_WADOR, AuditMessages.EventID.DICOMInstancesTransferred, AuditMessages.EventActionCode.Update,
                 AuditMessages.RoleIDCode.Source, AuditMessages.RoleIDCode.Destination, true, false, false, null),
 
-        RTRV_B_M_P(EventClass.RETRIEVE, AuditMessages.EventID.BeginTransferringDICOMInstances, AuditMessages.EventActionCode.Execute, AuditMessages.EventOutcomeIndicator.Success,
+        RTRV_BGN_M(EventClass.RETRIEVE, AuditMessages.EventID.BeginTransferringDICOMInstances, AuditMessages.EventActionCode.Execute,
                 AuditMessages.RoleIDCode.Source, AuditMessages.RoleIDCode.Destination, false, false, true, null),
-        RTRV_B_M_E(EventClass.RETRIEVE, AuditMessages.EventID.BeginTransferringDICOMInstances, AuditMessages.EventActionCode.Execute, AuditMessages.EventOutcomeIndicator.MinorFailure,
-                AuditMessages.RoleIDCode.Source, AuditMessages.RoleIDCode.Destination, false, false, true, null),
-        RTRV_B_G_P(EventClass.RETRIEVE, AuditMessages.EventID.BeginTransferringDICOMInstances, AuditMessages.EventActionCode.Execute, AuditMessages.EventOutcomeIndicator.Success,
+        RTRV_BGN_G(EventClass.RETRIEVE, AuditMessages.EventID.BeginTransferringDICOMInstances, AuditMessages.EventActionCode.Execute,
                 AuditMessages.RoleIDCode.Source, AuditMessages.RoleIDCode.Destination, false, true, false, null),
-        RTRV_B_G_E(EventClass.RETRIEVE, AuditMessages.EventID.BeginTransferringDICOMInstances, AuditMessages.EventActionCode.Execute, AuditMessages.EventOutcomeIndicator.MinorFailure,
-                AuditMessages.RoleIDCode.Source, AuditMessages.RoleIDCode.Destination, false, true, false, null),
-        RTRV_B_E_P(EventClass.RETRIEVE, AuditMessages.EventID.BeginTransferringDICOMInstances, AuditMessages.EventActionCode.Execute, AuditMessages.EventOutcomeIndicator.Success,
+        RTRV_BGN_E(EventClass.RETRIEVE, AuditMessages.EventID.BeginTransferringDICOMInstances, AuditMessages.EventActionCode.Execute,
                 AuditMessages.RoleIDCode.Source, AuditMessages.RoleIDCode.Destination, true, false, false, null),
-        RTRV_B_E_E(EventClass.RETRIEVE, AuditMessages.EventID.BeginTransferringDICOMInstances, AuditMessages.EventActionCode.Execute, AuditMessages.EventOutcomeIndicator.MinorFailure,
-                AuditMessages.RoleIDCode.Source, AuditMessages.RoleIDCode.Destination, true, false, false, null),
-        RTRV_T_M_P(EventClass.RETRIEVE, AuditMessages.EventID.DICOMInstancesTransferred, AuditMessages.EventActionCode.Read, AuditMessages.EventOutcomeIndicator.Success,
-                AuditMessages.RoleIDCode.Source, AuditMessages.RoleIDCode.Destination, false, false, true, null),
-        RTRV_T_M_E(EventClass.RETRIEVE, AuditMessages.EventID.DICOMInstancesTransferred, AuditMessages.EventActionCode.Read, AuditMessages.EventOutcomeIndicator.MinorFailure,
-                AuditMessages.RoleIDCode.Source, AuditMessages.RoleIDCode.Destination, false, false, true, null),
-        RTRV_T_G_P(EventClass.RETRIEVE, AuditMessages.EventID.DICOMInstancesTransferred, AuditMessages.EventActionCode.Read, AuditMessages.EventOutcomeIndicator.Success,
-                AuditMessages.RoleIDCode.Source, AuditMessages.RoleIDCode.Destination, false, true, false, null),
-        RTRV_T_G_E(EventClass.RETRIEVE, AuditMessages.EventID.DICOMInstancesTransferred, AuditMessages.EventActionCode.Read, AuditMessages.EventOutcomeIndicator.MinorFailure,
-                AuditMessages.RoleIDCode.Source, AuditMessages.RoleIDCode.Destination, false, true, false, null),
-        RTRV_T_E_P(EventClass.RETRIEVE, AuditMessages.EventID.DICOMInstancesTransferred, AuditMessages.EventActionCode.Read, AuditMessages.EventOutcomeIndicator.Success,
-                AuditMessages.RoleIDCode.Source, AuditMessages.RoleIDCode.Destination, true, false, false, null),
-        RTRV_T_E_E(EventClass.RETRIEVE, AuditMessages.EventID.DICOMInstancesTransferred, AuditMessages.EventActionCode.Read, AuditMessages.EventOutcomeIndicator.MinorFailure,
-                AuditMessages.RoleIDCode.Source, AuditMessages.RoleIDCode.Destination, true, false, false, null),
-        RTRV_B_W_P(EventClass.RETRIEVE, AuditMessages.EventID.BeginTransferringDICOMInstances, AuditMessages.EventActionCode.Execute, AuditMessages.EventOutcomeIndicator.Success,
-                AuditMessages.RoleIDCode.Source, AuditMessages.RoleIDCode.Destination, false, true, false, null),
-        RTRV_B_W_E(EventClass.RETRIEVE, AuditMessages.EventID.BeginTransferringDICOMInstances, AuditMessages.EventActionCode.Execute, AuditMessages.EventOutcomeIndicator.MinorFailure,
-                AuditMessages.RoleIDCode.Source, AuditMessages.RoleIDCode.Destination, false, true, false, null),
-        RTRV_T_W_P(EventClass.RETRIEVE, AuditMessages.EventID.DICOMInstancesTransferred, AuditMessages.EventActionCode.Read, AuditMessages.EventOutcomeIndicator.Success,
-                AuditMessages.RoleIDCode.Source, AuditMessages.RoleIDCode.Destination, false, true, false, null),
-        RTRV_T_W_E(EventClass.RETRIEVE, AuditMessages.EventID.DICOMInstancesTransferred, AuditMessages.EventActionCode.Read, AuditMessages.EventOutcomeIndicator.MinorFailure,
+        RTRV_BGN_W(EventClass.RETRIEVE, AuditMessages.EventID.BeginTransferringDICOMInstances, AuditMessages.EventActionCode.Execute,
                 AuditMessages.RoleIDCode.Source, AuditMessages.RoleIDCode.Destination, false, true, false, null),
 
-        DELETE_PAS(EventClass.DELETE, AuditMessages.EventID.DICOMInstancesAccessed, AuditMessages.EventActionCode.Delete, AuditMessages.EventOutcomeIndicator.Success,
-                null, null, true, false, false, null),
-        DELETE_ERR(EventClass.DELETE, AuditMessages.EventID.DICOMInstancesAccessed, AuditMessages.EventActionCode.Delete, AuditMessages.EventOutcomeIndicator.MinorFailure,
+        RTRV_T_M_P(EventClass.RETRIEVE, AuditMessages.EventID.DICOMInstancesTransferred, AuditMessages.EventActionCode.Read,
+                AuditMessages.RoleIDCode.Source, AuditMessages.RoleIDCode.Destination, false, false, true, null),
+        RTRV_T_M_E(EventClass.RETRIEVE, AuditMessages.EventID.DICOMInstancesTransferred, AuditMessages.EventActionCode.Read,
+                AuditMessages.RoleIDCode.Source, AuditMessages.RoleIDCode.Destination, false, false, true, null),
+        RTRV_T_G_P(EventClass.RETRIEVE, AuditMessages.EventID.DICOMInstancesTransferred, AuditMessages.EventActionCode.Read,
+                AuditMessages.RoleIDCode.Source, AuditMessages.RoleIDCode.Destination, false, true, false, null),
+        RTRV_T_G_E(EventClass.RETRIEVE, AuditMessages.EventID.DICOMInstancesTransferred, AuditMessages.EventActionCode.Read,
+                AuditMessages.RoleIDCode.Source, AuditMessages.RoleIDCode.Destination, false, true, false, null),
+        RTRV_T_E_P(EventClass.RETRIEVE, AuditMessages.EventID.DICOMInstancesTransferred, AuditMessages.EventActionCode.Read,
+                AuditMessages.RoleIDCode.Source, AuditMessages.RoleIDCode.Destination, true, false, false, null),
+        RTRV_T_E_E(EventClass.RETRIEVE, AuditMessages.EventID.DICOMInstancesTransferred, AuditMessages.EventActionCode.Read,
+                AuditMessages.RoleIDCode.Source, AuditMessages.RoleIDCode.Destination, true, false, false, null),
+        RTRV_T_W_P(EventClass.RETRIEVE, AuditMessages.EventID.DICOMInstancesTransferred, AuditMessages.EventActionCode.Read,
+                AuditMessages.RoleIDCode.Source, AuditMessages.RoleIDCode.Destination, false, true, false, null),
+        RTRV_T_W_E(EventClass.RETRIEVE, AuditMessages.EventID.DICOMInstancesTransferred, AuditMessages.EventActionCode.Read,
+                AuditMessages.RoleIDCode.Source, AuditMessages.RoleIDCode.Destination, false, true, false, null),
+
+        RJN_DELETE(EventClass.DELETE, AuditMessages.EventID.DICOMInstancesAccessed, AuditMessages.EventActionCode.Delete,
                 null, null, true, false, false, null),
 
-        PERM_DEL_E(EventClass.PERM_DELETE, AuditMessages.EventID.DICOMStudyDeleted, AuditMessages.EventActionCode.Delete, AuditMessages.EventOutcomeIndicator.MinorFailure,
-                null, null, false, false, false, null),
-        PERM_DEL_S(EventClass.PERM_DELETE, AuditMessages.EventID.DICOMStudyDeleted, AuditMessages.EventActionCode.Delete, AuditMessages.EventOutcomeIndicator.Success,
-                null, null, false, false, false, null),
+        PRMDLT_SCH(EventClass.PERM_DELETE, AuditMessages.EventID.DICOMStudyDeleted, AuditMessages.EventActionCode.Delete,
+                null, null, false, true, false, null),
+        PRMDLT_WEB(EventClass.PERM_DELETE, AuditMessages.EventID.DICOMStudyDeleted, AuditMessages.EventActionCode.Delete,
+                null, null, true, false, false, null),
 
-        APPLNSTART(EventClass.APPLN_ACTIVITY, AuditMessages.EventID.ApplicationActivity, AuditMessages.EventActionCode.Execute, AuditMessages.EventOutcomeIndicator.Success,
+        APPLNSTART(EventClass.APPLN_ACTIVITY, AuditMessages.EventID.ApplicationActivity, AuditMessages.EventActionCode.Execute,
                 null, null, false, false, false, AuditMessages.EventTypeCode.ApplicationStart),
-        APPLN_STOP(EventClass.APPLN_ACTIVITY, AuditMessages.EventID.ApplicationActivity, AuditMessages.EventActionCode.Execute, AuditMessages.EventOutcomeIndicator.Success,
+        APPLN_STOP(EventClass.APPLN_ACTIVITY, AuditMessages.EventID.ApplicationActivity, AuditMessages.EventActionCode.Execute,
                 null, null, false, false, false, AuditMessages.EventTypeCode.ApplicationStop),
 
-        QUERY_QIDO(EventClass.QUERY, AuditMessages.EventID.Query, AuditMessages.EventActionCode.Execute, AuditMessages.EventOutcomeIndicator.Success,
+        QUERY_QIDO(EventClass.QUERY, AuditMessages.EventID.Query, AuditMessages.EventActionCode.Execute,
                 AuditMessages.RoleIDCode.Source, AuditMessages.RoleIDCode.Destination, true, false, false, null),
-        QUERY_FIND(EventClass.QUERY, AuditMessages.EventID.Query, AuditMessages.EventActionCode.Execute, AuditMessages.EventOutcomeIndicator.Success,
+        QUERY_FIND(EventClass.QUERY, AuditMessages.EventID.Query, AuditMessages.EventActionCode.Execute,
                 AuditMessages.RoleIDCode.Source, AuditMessages.RoleIDCode.Destination, true, false, false, null),
 
         CONN__RJCT(EventClass.CONN_REJECT, AuditMessages.EventID.SecurityAlert, AuditMessages.EventActionCode.Execute,
-                AuditMessages.EventOutcomeIndicator.MinorFailure, null, null, false, false, false, AuditMessages.EventTypeCode.NodeAuthentication),
+                null, null, false, false, false, AuditMessages.EventTypeCode.NodeAuthentication),
 
-        HL7_CREA_P(EventClass.HL7, AuditMessages.EventID.PatientRecord, AuditMessages.EventActionCode.Create,
-                AuditMessages.EventOutcomeIndicator.Success, AuditMessages.RoleIDCode.Source,
-                AuditMessages.RoleIDCode.Destination, true, false, false,
-                AuditMessages.EventTypeCode.ITI_8_PatientIdentityFeed),
-        HL7_CREA_E(EventClass.HL7, AuditMessages.EventID.PatientRecord, AuditMessages.EventActionCode.Create,
-                AuditMessages.EventOutcomeIndicator.MinorFailure, AuditMessages.RoleIDCode.Source,
-                AuditMessages.RoleIDCode.Destination, true, false, false,
-                AuditMessages.EventTypeCode.ITI_8_PatientIdentityFeed),
-        HL7_UPDA_P(EventClass.HL7, AuditMessages.EventID.PatientRecord, AuditMessages.EventActionCode.Update,
-                AuditMessages.EventOutcomeIndicator.Success, AuditMessages.RoleIDCode.Source,
-                AuditMessages.RoleIDCode.Destination, true, false, false,
-                AuditMessages.EventTypeCode.ITI_8_PatientIdentityFeed),
-        HL7_UPDA_E(EventClass.HL7, AuditMessages.EventID.PatientRecord, AuditMessages.EventActionCode.Update,
-                AuditMessages.EventOutcomeIndicator.MinorFailure, AuditMessages.RoleIDCode.Source,
-                AuditMessages.RoleIDCode.Destination, true, false, false,
-                AuditMessages.EventTypeCode.ITI_8_PatientIdentityFeed),
-        HL7_DELT_P(EventClass.HL7, AuditMessages.EventID.PatientRecord, AuditMessages.EventActionCode.Delete,
-                AuditMessages.EventOutcomeIndicator.Success,
-                AuditMessages.RoleIDCode.Source, AuditMessages.RoleIDCode.Destination, true, false, false,
-                AuditMessages.EventTypeCode.ITI_8_PatientIdentityFeed),
-        HL7_DELT_E(EventClass.HL7, AuditMessages.EventID.PatientRecord, AuditMessages.EventActionCode.Delete,
-                AuditMessages.EventOutcomeIndicator.MinorFailure,
-                AuditMessages.RoleIDCode.Source, AuditMessages.RoleIDCode.Destination, true, false, false,
-                AuditMessages.EventTypeCode.ITI_8_PatientIdentityFeed);
+        PAT_CREATE(EventClass.HL7, AuditMessages.EventID.PatientRecord, AuditMessages.EventActionCode.Create,
+                AuditMessages.RoleIDCode.Source, AuditMessages.RoleIDCode.Destination, true, false, false, null),
+        PAT_UPDATE(EventClass.HL7, AuditMessages.EventID.PatientRecord, AuditMessages.EventActionCode.Update,
+                AuditMessages.RoleIDCode.Source, AuditMessages.RoleIDCode.Destination, true, false, false, null),
+        PAT_DELETE(EventClass.HL7, AuditMessages.EventID.PatientRecord, AuditMessages.EventActionCode.Delete,
+                AuditMessages.RoleIDCode.Source, AuditMessages.RoleIDCode.Destination, true, false, false, null),
+        PAT_DLT_SC(EventClass.HL7, AuditMessages.EventID.PatientRecord, AuditMessages.EventActionCode.Delete,
+                null, null, false, true, false, null),
+
+        PROC_STD_C(EventClass.PROC_STUDY, AuditMessages.EventID.ProcedureRecord, AuditMessages.EventActionCode.Create,
+                null, null, true, false, false, null),
+        PROC_STD_U(EventClass.PROC_STUDY, AuditMessages.EventID.ProcedureRecord, AuditMessages.EventActionCode.Update,
+                 null, null, true, false, false, null),
+        PROC_STD_D(EventClass.PROC_STUDY, AuditMessages.EventID.ProcedureRecord, AuditMessages.EventActionCode.Delete,
+                 null, null, true, false, false, null);
 
 
         final EventClass eventClass;
         final AuditMessages.EventID eventID;
         final String eventActionCode;
-        final String outcomeIndicator;
         final AuditMessages.RoleIDCode source;
         final AuditMessages.RoleIDCode destination;
         final boolean isSource;
@@ -179,12 +139,11 @@ public class AuditServiceUtils {
         final EventTypeCode eventTypeCode;
 
 
-        EventType(EventClass eventClass, AuditMessages.EventID eventID, String eventActionCode, String outcome, AuditMessages.RoleIDCode source,
+        EventType(EventClass eventClass, AuditMessages.EventID eventID, String eventActionCode, AuditMessages.RoleIDCode source,
                   AuditMessages.RoleIDCode destination, boolean isSource, boolean isDest, boolean isOther, EventTypeCode etc) {
             this.eventClass = eventClass;
             this.eventID = eventID;
             this.eventActionCode = eventActionCode;
-            this.outcomeIndicator = outcome;
             this.source = source;
             this.destination = destination;
             this.isSource = isSource;
@@ -201,52 +160,61 @@ public class AuditServiceUtils {
             return (ctx.getHttpRequest() != null) ? QUERY_QIDO : QUERY_FIND;
         }
 
-        static EventType forWADORetrieve(RetrieveContext ctx) {
-            return ctx.getException() != null ? ITRF_WAD_E : ITRF_WAD_P;
-        }
-
         static EventType forInstanceStored(StoreContext ctx) {
-            return ctx.getException() != null
-                    ? ctx.getPreviousInstance() != null ? ITRF_S_U_E : ITRF_S_C_E
-                    : ctx.getLocation() != null
-                    ? ctx.getPreviousInstance() != null ? ITRF_S_U_P : ITRF_S_C_P
-                    : null;
+            return !ctx.getLocations().isEmpty()
+                    ? ctx.getPreviousInstance() != null ? STORE_UPDT : STORE_CREA
+                    : ctx.getStoredInstance() != null ? STORE_CREA : null;
         }
 
         static HashSet<EventType> forBeginTransfer(RetrieveContext ctx) {
             HashSet<EventType> eventType = new HashSet<>();
-            if (null != ctx.getException())
-                eventType.add(ctx.isLocalRequestor() ? RTRV_B_E_E
-                        : !ctx.isDestinationRequestor() && !ctx.isLocalRequestor() ? RTRV_B_M_E
-                        : null != ctx.getRequestAssociation() && null != ctx.getStoreAssociation()
-                            && ctx.isDestinationRequestor() ? RTRV_B_G_E
-                        : null != ctx.getHttpRequest() ? RTRV_B_W_E : null);
-            if (ctx.getException() == null)
-                eventType.add(ctx.isLocalRequestor() ? RTRV_B_E_P
-                        : !ctx.isDestinationRequestor() && !ctx.isLocalRequestor() ? RTRV_B_M_P
-                        : null != ctx.getRequestAssociation() && null != ctx.getStoreAssociation()
-                        && ctx.isDestinationRequestor()
-                        ? RTRV_B_G_P : null != ctx.getHttpRequest() ? RTRV_B_W_P : null);
+            eventType.add(ctx.isLocalRequestor() ? RTRV_BGN_E
+                    : !ctx.isDestinationRequestor() && !ctx.isLocalRequestor() ? RTRV_BGN_M
+                    : null != ctx.getRequestAssociation() && null != ctx.getStoreAssociation()
+                    && ctx.isDestinationRequestor()
+                    ? RTRV_BGN_G : null != ctx.getHttpRequest() ? RTRV_BGN_W : null);
             return eventType;
         }
 
         static HashSet<EventType> forDicomInstTransferred(RetrieveContext ctx) {
             HashSet<EventType> eventType = new HashSet<>();
-            if (ctx.failedSOPInstanceUIDs().length != ctx.getMatches().size()) {
-                if (null != ctx.getException() || ctx.failedSOPInstanceUIDs().length > 0) {
-                    eventType.add(getDicomInstTrfdErrorEventType(ctx));
+            HashSet<DicomInstancesTransferredOutcomeType> outcomes = getInstancesTransferredOutcomeType(ctx);
+            for (DicomInstancesTransferredOutcomeType ot : outcomes)
+                switch (ot) {
+                    case PARTIAL_TRANSFERRED_EXCEPTION:
+                    case ALL_FAIL:
+                        eventType.add(getDicomInstTrfdErrorEventType(ctx));
+                        break;
+                    case ALL_SUCCESS:
+                    case CSTOREFWD:
+                    case PARTIAL_TRANSFERRED:
+                        eventType.add(getDicomInstTrfdSuccessEventType(ctx));
+                        break;
                 }
-                if (ctx.getException() == null || ctx.failedSOPInstanceUIDs().length > 0) {
-                    eventType.add(ctx.isLocalRequestor() ? RTRV_T_E_P
-                            : !ctx.isDestinationRequestor() && !ctx.isLocalRequestor() ? RTRV_T_M_P
-                            : null != ctx.getRequestAssociation() && null != ctx.getStoreAssociation()
-                            && ctx.isDestinationRequestor()
-                            ? RTRV_T_G_P : null != ctx.getHttpRequest() ? RTRV_T_W_P : null);
-                }
-            }
-            else
-                eventType.add(getDicomInstTrfdErrorEventType(ctx));
             return eventType;
+        }
+
+        static HashSet<DicomInstancesTransferredOutcomeType> getInstancesTransferredOutcomeType(RetrieveContext ctx) {
+            HashSet<DicomInstancesTransferredOutcomeType> ot = new HashSet<>();
+            if (ctx.failedSOPInstanceUIDs().length == ctx.getMatches().size() && !ctx.getMatches().isEmpty())
+                ot.add(DicomInstancesTransferredOutcomeType.ALL_FAIL);
+            if (ctx.failedSOPInstanceUIDs().length == 0 && !ctx.getMatches().isEmpty())
+                ot.add(DicomInstancesTransferredOutcomeType.ALL_SUCCESS);
+            if (ctx.getMatches().isEmpty() && !ctx.getCStoreForwards().isEmpty())
+                ot.add(DicomInstancesTransferredOutcomeType.CSTOREFWD);
+            if (ctx.failedSOPInstanceUIDs().length != ctx.getMatches().size() && ctx.failedSOPInstanceUIDs().length > 0) {
+                ot.add(DicomInstancesTransferredOutcomeType.PARTIAL_TRANSFERRED_EXCEPTION);
+                ot.add(DicomInstancesTransferredOutcomeType.PARTIAL_TRANSFERRED);
+            }
+            return ot;
+        }
+
+        static EventType getDicomInstTrfdSuccessEventType(RetrieveContext ctx) {
+            return ctx.isLocalRequestor() ? RTRV_T_E_P
+                    : !ctx.isDestinationRequestor() && !ctx.isLocalRequestor() ? RTRV_T_M_P
+                    : null != ctx.getRequestAssociation() && null != ctx.getStoreAssociation()
+                    && ctx.isDestinationRequestor()
+                    ? RTRV_T_G_P : null != ctx.getHttpRequest() ? RTRV_T_W_P : null;
         }
 
         static EventType getDicomInstTrfdErrorEventType(RetrieveContext ctx) {
@@ -259,92 +227,28 @@ public class AuditServiceUtils {
 
         static HashSet<EventType> forHL7(PatientMgtContext ctx) {
             HashSet<EventType> eventType = new HashSet<>();
-            if (ctx.getException() != null)
-                eventType.add(ctx.getEventActionCode().equals(AuditMessages.EventActionCode.Create)
-                        ? HL7_CREA_E
-                        : ctx.getEventActionCode().equals(AuditMessages.EventActionCode.Update)
-                        ? HL7_UPDA_E : null);
-            else
-                eventType.add(ctx.getEventActionCode().equals(AuditMessages.EventActionCode.Create)
-                        ? HL7_CREA_P
-                        : ctx.getEventActionCode().equals(AuditMessages.EventActionCode.Update)
-                        ? HL7_UPDA_P
-                        : null);
+            eventType.add(ctx.getEventActionCode().equals(AuditMessages.EventActionCode.Create)
+                    ? PAT_CREATE
+                    : ctx.getEventActionCode().equals(AuditMessages.EventActionCode.Update)
+                    ? PAT_UPDATE
+                    : ctx.getEventActionCode().equals(AuditMessages.EventActionCode.Delete)
+                    ? ctx.getHttpRequest() != null ? PAT_DELETE : PAT_DLT_SC : null);
             if (ctx.getPreviousAttributes() != null || ctx.getPreviousPatientID() != null)
-                eventType.add(ctx.getException() != null ? HL7_DELT_E : HL7_DELT_P);
+                eventType.add(PAT_DELETE);
             return eventType;
         }
-    }
 
-    static void emitAuditMessage(EventType eventType, String outcomeDesc, List<ActiveParticipant> apList,
-                                 List<ParticipantObjectIdentification> poiList, AuditLogger log, Calendar eventTime) {
-        AuditMessage msg = new AuditMessage();
-        msg.setEventIdentification(AuditMessages.createEventIdentification(
-                eventType.eventID, eventType.eventActionCode, eventTime, eventType.outcomeIndicator,
-                outcomeDesc, eventType.eventTypeCode));
-        for (ActiveParticipant ap : apList)
-            msg.getActiveParticipant().add(ap);
-        msg.getAuditSourceIdentification().add(log.createAuditSourceIdentification());
-        for (ParticipantObjectIdentification poi : poiList)
-            msg.getParticipantObjectIdentification().add(poi);
-        try {
-            log.write(log.timeStamp(), msg);
-        } catch (Exception e) {
-            LOG.warn("Failed to emit audit message", e);
+        static HashSet<EventType> forProcedure(String eac) {
+            HashSet<EventType> et = new HashSet<>();
+            et.add(eac.equals(AuditMessages.EventActionCode.Create)
+                    ? EventType.PROC_STD_C : eac.equals(AuditMessages.EventActionCode.Update)
+                    ? EventType.PROC_STD_U : PROC_STD_D);
+            return et;
         }
     }
 
-    static Calendar getEventTime(Path path, AuditLogger log){
-        Calendar eventTime = log.timeStamp();
-        try {
-            eventTime.setTimeInMillis(Files.getLastModifiedTime(path).toMillis());
-        } catch (Exception e) {
-            LOG.warn("Failed to get Last Modified Time of Audit Spool File - {} ", path, e);
-        }
-        return eventTime;
+    enum DicomInstancesTransferredOutcomeType {
+        ALL_FAIL, ALL_SUCCESS, PARTIAL_TRANSFERRED, PARTIAL_TRANSFERRED_EXCEPTION, CSTOREFWD
     }
 
-    static String buildAET(Device device) {
-        String[] aets = device.getApplicationAETitles().toArray(new String[device.getApplicationAETitles().size()]);
-        StringBuilder b = new StringBuilder();
-        b.append(aets[0]);
-        for (int i = 1; i < aets.length; i++)
-            b.append(';').append(aets[i]);
-        return b.toString();
-    }
-
-    static String getLocalHostName(AuditLogger log) {
-        return log.getConnections().get(0).getHostname();
-    }
-
-    static String getPreferredUsername(HttpServletRequest req) {
-        RefreshableKeycloakSecurityContext securityContext = (RefreshableKeycloakSecurityContext)
-                req.getAttribute(KeycloakSecurityContext.class.getName());
-        return securityContext.getToken().getPreferredUsername();
-    }
-
-    static HashSet<Accession> getAccessions(String accNum) {
-        HashSet<Accession> accList = new HashSet<>();
-        if (accNum != null)
-            accList.add(AuditMessages.createAccession(accNum));
-        return accList;
-    }
-
-    static HashSet<ParticipantObjectDetail> getParticipantObjectDetail(PatientStudyInfo psi, HL7Info hl7i,
-                                                                       AuditServiceUtils.EventType et) {
-        HashSet<ParticipantObjectDetail> details = new HashSet<>();
-        if (psi != null && psi.getField(PatientStudyInfo.STUDY_DATE) != null)
-            details.add(pod(AuditServiceUtils.studyDate, psi.getField(PatientStudyInfo.STUDY_DATE).getBytes()));
-        if (hl7i != null && hl7i.getField(HL7Info.POD_VALUE) != null)
-            details.add(pod(hl7i.getField(HL7Info.POD_TYPE), hl7i.getField(HL7Info.POD_VALUE).getBytes()));
-        if (et == AuditServiceUtils.EventType.QUERY_QIDO)
-            details.add(pod("QueryEncoding", String.valueOf(StandardCharsets.UTF_8).getBytes()));
-        if (et == AuditServiceUtils.EventType.QUERY_FIND)
-            details.add(pod("TransferSyntax", UID.ImplicitVRLittleEndian.getBytes()));
-        return details;
-    }
-
-    private static ParticipantObjectDetail pod(String s, byte[] b) {
-        return AuditMessages.createParticipantObjectDetail(s, b);
-    }
 }

@@ -42,10 +42,7 @@ package org.dcm4chee.arc.query.util;
 
 import com.querydsl.core.BooleanBuilder;
 import com.querydsl.core.Tuple;
-import com.querydsl.core.types.ExpressionUtils;
-import com.querydsl.core.types.Order;
-import com.querydsl.core.types.OrderSpecifier;
-import com.querydsl.core.types.Predicate;
+import com.querydsl.core.types.*;
 import com.querydsl.core.types.dsl.*;
 import com.querydsl.jpa.JPAExpressions;
 import com.querydsl.jpa.JPQLQuery;
@@ -55,8 +52,12 @@ import org.dcm4che3.net.service.QueryRetrieveLevel2;
 import org.dcm4che3.util.StringUtils;
 import org.dcm4chee.arc.conf.AttributeFilter;
 import org.dcm4chee.arc.conf.Entity;
+import org.dcm4chee.arc.conf.SPSStatus;
 import org.dcm4chee.arc.entity.*;
 
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.util.Date;
 import java.util.List;
 
 /**
@@ -71,10 +72,12 @@ public class QueryBuilder {
     public static final QPersonName performingPhysicianName = new QPersonName("performingPhysicianName");
     public static final QPersonName verifyingObserverName = new QPersonName("verifyingObserverName");
     public static final QPersonName requestingPhysician = new QPersonName("requestingPhysician");
+    public static final QPersonName responsiblePerson = new QPersonName("responsiblePerson");
     public static final QAttributesBlob patientAttributesBlob = new QAttributesBlob("patientAttributesBlob");
     public static final QAttributesBlob studyAttributesBlob = new QAttributesBlob("studyAttributesBlob");
     public static final QAttributesBlob seriesAttributesBlob =  new QAttributesBlob("seriesAttributesBlob");
     public static final QAttributesBlob instanceAttributesBlob = new QAttributesBlob("instanceAttributesBlob");
+    public static final QAttributesBlob mwlAttributesBlob = new QAttributesBlob("mwlAttributesBlob");
     public static final QIssuerEntity patientIDIssuer = new QIssuerEntity("patientIDIssuer");
 
     private QueryBuilder() {}
@@ -162,7 +165,38 @@ public class QueryBuilder {
         return false;
     }
 
+    public static boolean addMWLOrderSpecifier(int tag, Order order, List<OrderSpecifier<?>> result) {
+        if (addOrderSpecifier(QueryRetrieveLevel2.PATIENT, tag, order, result))
+            return true;
+
+        switch (tag) {
+            case Tag.AccessionNumber:
+                return result.add(orderSpecifierOf(QMWLItem.mWLItem.accessionNumber, order));
+            case Tag.Modality:
+                return result.add(orderSpecifierOf(QMWLItem.mWLItem.modality, order));
+            case Tag.StudyInstanceUID:
+                return result.add(orderSpecifierOf(QMWLItem.mWLItem.studyInstanceUID, order));
+             case Tag.ScheduledProcedureStepStartDate:
+                return result.add(orderSpecifierOf(QMWLItem.mWLItem.scheduledStartDate, order));
+            case Tag.ScheduledProcedureStepStartTime:
+                return result.add(orderSpecifierOf(QMWLItem.mWLItem.scheduledStartTime, order));
+            case Tag.ScheduledPerformingPhysicianName:
+                result.add(orderSpecifierOf(performingPhysicianName.familyName, order));
+                result.add(orderSpecifierOf(performingPhysicianName.givenName, order));
+                return result.add(orderSpecifierOf(performingPhysicianName.middleName, order));
+            case Tag.ScheduledProcedureStepID:
+                return result.add(orderSpecifierOf(QMWLItem.mWLItem.scheduledProcedureStepID, order));
+            case Tag.RequestedProcedureID:
+                return result.add(orderSpecifierOf(QMWLItem.mWLItem.requestedProcedureID, order));
+        }
+        return false;
+    }
+
     private static OrderSpecifier orderSpecifierOf(StringPath path, Order order) {
+        return order == Order.ASC ? path.asc() : path.desc();
+    }
+
+    private static OrderSpecifier orderSpecifierOf(NumberPath<Integer> path, Order order) {
         return order == Order.ASC ? path.asc() : path.desc();
     }
 
@@ -170,9 +204,12 @@ public class QueryBuilder {
             HibernateQuery<Tuple> query, IDWithIssuer[] pids, Attributes keys, QueryParam queryParam,
             boolean orderByPatientName) {
         query = applyPatientIDJoins(query, pids);
-        if (orderByPatientName || !isUniversalMatching(keys.getString(Tag.PatientName)))
+        if (!isUniversalMatching(keys.getString(Tag.PatientName)))
             query = query.join(QPatient.patient.patientName, QueryBuilder.patientName);
-
+        else if (orderByPatientName)
+            query = query.leftJoin(QPatient.patient.patientName, QueryBuilder.patientName);
+        if (!isUniversalMatching(keys.getString(Tag.ResponsiblePerson)))
+            query = query.join(QPatient.patient.responsiblePerson, QueryBuilder.responsiblePerson);
         query = query.join(QPatient.patient.attributesBlob, QueryBuilder.patientAttributesBlob);
         return query;
 
@@ -218,6 +255,9 @@ public class QueryBuilder {
                 AttributeFilter.selectStringValue(keys, attrFilter.getCustomAttribute2(), "*"), true));
         builder.and(wildCard(QPatient.patient.patientCustomAttribute3,
                 AttributeFilter.selectStringValue(keys, attrFilter.getCustomAttribute3(), "*"), true));
+        if (!queryParam.isWithoutStudies())
+            builder.and(QPatient.patient.numberOfStudies.gt(0));
+        builder.and(MatchPersonName.match(QueryBuilder.responsiblePerson, keys.getString(Tag.ResponsiblePerson, "*"), queryParam));
     }
 
     public static HibernateQuery<Tuple> applyStudyLevelJoins(
@@ -245,7 +285,8 @@ public class QueryBuilder {
         return path.in(values);
     }
 
-    public static void addStudyLevelPredicates(BooleanBuilder builder, Attributes keys, QueryParam queryParam) {
+    public static void addStudyLevelPredicates(BooleanBuilder builder, Attributes keys,
+                                               QueryParam queryParam, QueryRetrieveLevel2 queryRetrieveLevel) {
         boolean combinedDatetimeMatching = queryParam.isCombinedDatetimeMatching();
         builder.and(accessControl(queryParam.getAccessControlIDs()));
         builder.and(uidsPredicate(QStudy.study.studyInstanceUID, keys.getStrings(Tag.StudyInstanceUID)));
@@ -265,7 +306,7 @@ public class QueryBuilder {
                 issuer = queryParam.getDefaultIssuerOfAccessionNumber();
             builder.and(idWithIssuer(QStudy.study.accessionNumber, QStudy.study.issuerOfAccessionNumber, accNo, issuer));
         }
-        builder.and(modalitiesInStudy(keys.getString(Tag.ModalitiesInStudy, "*").toUpperCase()));
+        builder.and(seriesAttributesInStudy(keys, queryParam));
         builder.and(sopClassInStudy(keys.getString(Tag.SOPClassesInStudy, "*")));
         builder.and(code(QStudy.study.procedureCodes, keys.getNestedDataset(Tag.ProcedureCodeSequence)));
         if (queryParam.isHideNotRejectedInstances())
@@ -277,12 +318,24 @@ public class QueryBuilder {
                 AttributeFilter.selectStringValue(keys, attrFilter.getCustomAttribute2(), "*"), true));
         builder.and(wildCard(QStudy.study.studyCustomAttribute3,
                 AttributeFilter.selectStringValue(keys, attrFilter.getCustomAttribute3(), "*"), true));
+        if (queryParam.getStudyReceiveDateTime() != null)
+            builder.and(ExpressionUtils.and(MatchDateTimeRange.range(
+                    QStudy.study.createdTime, getDateRange(queryParam.getStudyReceiveDateTime()), MatchDateTimeRange.FormatDate.DT),
+                    QStudy.study.createdTime.isNotNull()));
+        if (queryRetrieveLevel == QueryRetrieveLevel2.STUDY) {
+            if (queryParam.isExpired())
+                builder.and(QStudy.study.expirationDate.loe(DateTimeFormatter.BASIC_ISO_DATE.format(LocalDate.now())));
+            if (queryParam.isIncomplete())
+                builder.and(QStudy.study.failedSOPInstanceUIDList.isNotNull());
+            if (queryParam.isRetrieveFailed())
+                builder.and(QStudy.study.failedRetrieves.gt(0));
+        }
     }
 
     public static Predicate accessControl(String[] accessControlIDs) {
-        if (accessControlIDs.length == 0)
+        if (accessControlIDs.length == 0) {
             return null;
-
+        }
         String[] a = new String[accessControlIDs.length + 1];
         a[0] = "*";
         System.arraycopy(accessControlIDs, 0, a, 1, accessControlIDs.length);
@@ -302,9 +355,10 @@ public class QueryBuilder {
         return query;
     }
 
-    public static void addSeriesLevelPredicates(BooleanBuilder builder, Attributes keys, QueryParam queryParam) {
+    public static void addSeriesLevelPredicates(BooleanBuilder builder, Attributes keys,
+                                                QueryParam queryParam, QueryRetrieveLevel2 queryRetrieveLevel) {
         builder.and(uidsPredicate(QSeries.series.seriesInstanceUID, keys.getStrings(Tag.SeriesInstanceUID)));
-        builder.and(wildCard(QSeries.series.seriesNumber, keys.getString(Tag.SeriesNumber, "*"), false));
+        builder.and(numberPredicate(QSeries.series.seriesNumber, keys.getString(Tag.SeriesNumber, "0")));
         builder.and(wildCard(QSeries.series.modality, keys.getString(Tag.Modality, "*").toUpperCase(),
                 false));
         builder.and(wildCard(QSeries.series.bodyPartExamined, keys.getString(Tag.BodyPartExamined, "*").toUpperCase(),
@@ -336,12 +390,23 @@ public class QueryBuilder {
                 AttributeFilter.selectStringValue(keys, attrFilter.getCustomAttribute2(), "*"), true));
         builder.and(wildCard(QSeries.series.seriesCustomAttribute3,
                 AttributeFilter.selectStringValue(keys, attrFilter.getCustomAttribute3(), "*"), true));
+        if (queryRetrieveLevel == QueryRetrieveLevel2.SERIES) {
+            if (queryParam.isExpired())
+                builder.and(QSeries.series.expirationDate.loe(DateTimeFormatter.BASIC_ISO_DATE.format(LocalDate.now())));
+            if (queryParam.isIncomplete())
+                builder.and(QSeries.series.failedSOPInstanceUIDList.isNotNull());
+            if (queryParam.isRetrieveFailed())
+                builder.and(QSeries.series.failedRetrieves.gt(0));
+            if (queryParam.getSendingApplicationEntityTitleOfSeries() != null)
+                builder.and(QSeries.series.sourceAET.eq(queryParam.getSendingApplicationEntityTitleOfSeries()));
+        }
     }
 
     public static HibernateQuery<Tuple> applyInstanceLevelJoins(
             HibernateQuery<Tuple> query, Attributes keys, QueryParam queryParam) {
         query = query.innerJoin(QInstance.instance.series, QSeries.series);
         query = query.join(QInstance.instance.attributesBlob, QueryBuilder.instanceAttributesBlob);
+        query = query.leftJoin(QInstance.instance.rejectionNoteCode, QCodeEntity.codeEntity);
         return query;
     }
 
@@ -349,7 +414,7 @@ public class QueryBuilder {
         boolean combinedDatetimeMatching = queryParam.isCombinedDatetimeMatching();
         builder.and(uidsPredicate(QInstance.instance.sopInstanceUID, keys.getStrings(Tag.SOPInstanceUID)));
         builder.and(uidsPredicate(QInstance.instance.sopClassUID, keys.getStrings(Tag.SOPClassUID)));
-        builder.and(wildCard(QInstance.instance.instanceNumber, keys.getString(Tag.InstanceNumber, "*"), false));
+        builder.and(numberPredicate(QInstance.instance.instanceNumber, keys.getString(Tag.InstanceNumber, "0")));
         builder.and(wildCard(QInstance.instance.verificationFlag,
                 keys.getString(Tag.VerificationFlag, "*").toUpperCase(), false));
         builder.and(wildCard(QInstance.instance.completionFlag,
@@ -386,6 +451,76 @@ public class QueryBuilder {
         builder.and(hideRejectionNote(queryParam));
     }
 
+    public static HibernateQuery<Tuple> applyMWLJoins(
+            HibernateQuery<Tuple> query, Attributes keys, QueryParam queryParam) {
+        query = query.innerJoin(QMWLItem.mWLItem.patient, QPatient.patient);
+
+        if (!isUniversalMatching(keys.getString(Tag.AccessionNumber))
+                && !isUniversalMatching(keys.getNestedDataset(Tag.IssuerOfAccessionNumberSequence))) {
+            query = query.leftJoin(QMWLItem.mWLItem.issuerOfAccessionNumber);
+        }
+
+        Attributes sps = keys.getNestedDataset(Tag.ScheduledProcedureStepSequence);
+        if (sps != null && !isUniversalMatching(sps.getString(Tag.ScheduledPerformingPhysicianName))) {
+            query = query.join(QMWLItem.mWLItem.scheduledPerformingPhysicianName, QueryBuilder.performingPhysicianName);
+        }
+        query = query.join(QMWLItem.mWLItem.attributesBlob, QueryBuilder.mwlAttributesBlob);
+        return query;
+    }
+
+    public static void addMWLPredicates(BooleanBuilder builder, Attributes keys, QueryParam queryParam) {
+        builder.and(uidsPredicate(QMWLItem.mWLItem.studyInstanceUID, keys.getStrings(Tag.StudyInstanceUID)));
+        builder.and(wildCard(QMWLItem.mWLItem.requestedProcedureID, keys.getString(Tag.RequestedProcedureID, "*"),
+                false));
+        String accNo = keys.getString(Tag.AccessionNumber, "*");
+        if (!accNo.equals("*")) {
+            Issuer issuer = Issuer.valueOf(keys.getNestedDataset(Tag.IssuerOfAccessionNumberSequence));
+            if (issuer == null) {
+                issuer = queryParam.getDefaultIssuerOfAccessionNumber();
+            }
+            builder.and(idWithIssuer(
+                    QMWLItem.mWLItem.accessionNumber, QMWLItem.mWLItem.issuerOfAccessionNumber, accNo, issuer));
+        }
+        Attributes sps = keys.getNestedDataset(Tag.ScheduledProcedureStepSequence);
+        if (sps != null) {
+            builder.and(wildCard(QMWLItem.mWLItem.scheduledProcedureStepID,
+                    sps.getString(Tag.ScheduledProcedureStepID, "*"), false));
+            builder.and(MatchDateTimeRange.rangeMatch(
+                    QMWLItem.mWLItem.scheduledStartDate, QMWLItem.mWLItem.scheduledStartTime,
+                    Tag.ScheduledProcedureStepStartDate, Tag.ScheduledProcedureStepStartDate,
+                    Tag.ScheduledProcedureStepStartDateAndTime,
+                    sps, true));
+            builder.and(MatchPersonName.match(QueryBuilder.performingPhysicianName,
+                    sps.getString(Tag.ScheduledPerformingPhysicianName, "*"), queryParam));
+            builder.and(wildCard(QMWLItem.mWLItem.modality, sps.getString(Tag.Modality, "*").toUpperCase(),
+                    false));
+            if (sps.getString(Tag.ScheduledProcedureStepStatus) != null)
+                builder.and(showSPSWithStatus(sps));
+            if (sps.getString(Tag.ScheduledStationAETitle) != null)
+                builder.and(QMWLItem.mWLItem.scheduledStationAETs.contains(sps.getString(Tag.ScheduledStationAETitle)));
+        }
+        builder.and(hideSPSWithStatus(queryParam));
+    }
+
+    private static Predicate hideSPSWithStatus(QueryParam queryParam) {
+        SPSStatus[] hideSPSWithStatusFromMWL = queryParam.getHideSPSWithStatusFromMWL();
+        return (hideSPSWithStatusFromMWL.length > 0)
+                ? QMWLItem.mWLItem.status.notIn(hideSPSWithStatusFromMWL)
+                : null;
+    }
+
+    private static Predicate showSPSWithStatus(Attributes sps) {
+        SPSStatus status = SPSStatus.valueOf(sps.getString(Tag.ScheduledProcedureStepStatus).toUpperCase());
+        switch(status) {
+            case SCHEDULED:
+            case ARRIVED:
+            case READY:
+                return QMWLItem.mWLItem.status.eq(status);
+            default:
+                return null;
+        }
+    }
+
     public static Predicate hideRejectedInstance(QueryParam queryParam) {
         return hideRejectedInstance(
                 queryParam.getShowInstancesRejectedByCode(),
@@ -405,10 +540,10 @@ public class QueryBuilder {
     }
 
     public static Predicate hideRejectionNote(QueryParam queryParam) {
-        return hideRejectionNode(queryParam.getHideRejectionNotesWithCode());
+        return hideRejectionNote(queryParam.getHideRejectionNotesWithCode());
     }
 
-    public static Predicate hideRejectionNode(CodeEntity[] codes) {
+    public static Predicate hideRejectionNote(CodeEntity[] codes) {
         if (codes.length == 0)
             return null;
 
@@ -453,6 +588,10 @@ public class QueryBuilder {
         return value == null || value.equals("*");
     }
 
+    private static boolean isUniversalMatching(Integer value) {
+        return value == null || value.equals(0);
+    }
+
     static Predicate wildCard(StringPath path, String value) {
         return wildCard(path, value, false);
     }
@@ -475,10 +614,20 @@ public class QueryBuilder {
         return predicate;
     }
 
+    static Predicate numberPredicate(NumberPath<Integer> path, String value) {
+        try {
+            Integer v = Integer.parseInt(value);
+            if (isUniversalMatching(v))
+                return null;
+            return path.eq(v);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
     static boolean containsWildcard(String s) {
         return s.indexOf('*') >= 0 || s.indexOf('?') >= 0;
     }
-
 
     static String toLikePattern(String s) {
         StringBuilder like = new StringBuilder(s.length());
@@ -506,14 +655,20 @@ public class QueryBuilder {
         return like.toString();
     }
 
-    static Predicate modalitiesInStudy(String modality) {
-        if (modality.equals("*"))
+    static Predicate seriesAttributesInStudy(Attributes keys, QueryParam queryParam) {
+        BooleanBuilder result = new BooleanBuilder();
+        result.and(wildCard(QSeries.series.institutionName, keys.getString(Tag.InstitutionName), true))
+            .and(wildCard(QSeries.series.institutionalDepartmentName, keys.getString(Tag.InstitutionalDepartmentName), true))
+            .and(wildCard(QSeries.series.stationName, keys.getString(Tag.StationName), true))
+            .and(wildCard(QSeries.series.seriesDescription, keys.getString(Tag.SeriesDescription), true))
+            .and(wildCard(QSeries.series.modality, keys.getString(Tag.ModalitiesInStudy, "*").toUpperCase(), false))
+            .and(wildCard(QSeries.series.bodyPartExamined, keys.getString(Tag.BodyPartExamined, "*").toUpperCase(), false));
+        if (queryParam.getSendingApplicationEntityTitleOfSeries() != null)
+            result.and(wildCard(QSeries.series.sourceAET, queryParam.getSendingApplicationEntityTitleOfSeries().toUpperCase(), false));
+        if (!result.hasValue())
             return null;
-
         return JPAExpressions.selectFrom(QSeries.series)
-                .where(QSeries.series.study.eq(QStudy.study),
-                        wildCard(QSeries.series.modality, modality,
-                                false)).exists();
+                .where(QSeries.series.study.eq(QStudy.study), result).exists();
     }
 
     static Predicate sopClassInStudy(String sopClass) {
@@ -659,5 +814,29 @@ public class QueryBuilder {
                 .where(QInstance.instance.contentItems
                                 .contains(QContentItem.contentItem),
                         predicate).exists();
+    }
+
+    private static DateRange getDateRange(String s) {
+        String[] range = splitRange(s);
+        DatePrecision precision = new DatePrecision();
+        Date start = range[0] == null ? null
+                : VR.DT.toDate(range[0], null, 0, false, null, precision);
+        Date end = range[1] == null ? null
+                : VR.DT.toDate(range[1], null, 0, true, null, precision);
+        return new DateRange(start, end);
+    }
+
+    private static String[] splitRange(String s) {
+        String[] range = new String[2];
+        int delim = s.indexOf('-');
+        if (delim == -1)
+            range[0] = range[1] = s;
+        else {
+            if (delim > 0)
+                range[0] =  s.substring(0, delim);
+            if (delim < s.length() - 1)
+                range[1] =  s.substring(delim+1);
+        }
+        return range;
     }
 }

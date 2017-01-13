@@ -45,14 +45,11 @@ import org.dcm4che3.io.*;
 import org.dcm4che3.json.JSONWriter;
 import org.dcm4che3.net.ApplicationEntity;
 import org.dcm4che3.net.Device;
-import org.dcm4che3.net.Dimse;
-import org.dcm4che3.net.TransferCapability;
 import org.dcm4che3.util.SafeClose;
 import org.dcm4che3.util.StringUtils;
 import org.dcm4che3.ws.rs.MediaTypes;
-import org.dcm4chee.arc.conf.ArchiveAEExtension;
-import org.dcm4chee.arc.conf.ArchiveAttributeCoercion;
 import org.dcm4chee.arc.conf.ArchiveDeviceExtension;
+import org.dcm4chee.arc.conf.MetadataFilter;
 import org.dcm4chee.arc.retrieve.*;
 import org.dcm4chee.arc.validation.constraints.ValidValueOf;
 import org.jboss.resteasy.plugins.providers.multipart.MultipartRelatedOutput;
@@ -72,7 +69,6 @@ import javax.ws.rs.container.AsyncResponse;
 import javax.ws.rs.container.CompletionCallback;
 import javax.ws.rs.container.Suspended;
 import javax.ws.rs.core.*;
-import javax.xml.transform.Templates;
 import javax.xml.transform.stream.StreamResult;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -83,6 +79,7 @@ import java.util.*;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
+ * @author Vrinda Nayak <vrinda.nayak@j4care.com>
  * @since Mar 2016
  */
 @RequestScoped
@@ -100,6 +97,9 @@ public class WadoRS {
 
     @Context
     private UriInfo uriInfo;
+
+    @Context
+    private Request req;
 
     @Context
     private HttpHeaders headers;
@@ -139,7 +139,7 @@ public class WadoRS {
     public void retrieveStudy(
             @PathParam("studyUID") String studyUID,
             @Suspended AsyncResponse ar) {
-        retrieve("retrieveStudy", studyUID, null, null, null, null, ar, Output.DICOM);
+        retrieve("retrieveStudy", studyUID, null, null, null, null, null, ar, Output.DICOM);
     }
 
     @GET
@@ -148,7 +148,7 @@ public class WadoRS {
     public void retrieveStudyBulkdata(
             @PathParam("studyUID") String studyUID,
             @Suspended AsyncResponse ar) {
-        retrieve("retrieveStudyBulkdata", studyUID, null, null, null, null, ar, Output.BULKDATA);
+        retrieve("retrieveStudyBulkdata", studyUID, null, null, null, null, null, ar, Output.BULKDATA);
     }
 
     @GET
@@ -156,8 +156,9 @@ public class WadoRS {
     @Produces("application/json")
     public void retrieveStudyMetadataAsJSON(
             @PathParam("studyUID") String studyUID,
+            @QueryParam("includefields") String includefields,
             @Suspended AsyncResponse ar) {
-        retrieve("retrieveStudyMetadataAsJSON", studyUID, null, null, null, null, ar, Output.METADATA_JSON);
+        retrieve("retrieveStudyMetadataAsJSON", studyUID, null, null, null, null, includefields, ar, Output.METADATA_JSON);
     }
 
     @GET
@@ -165,8 +166,9 @@ public class WadoRS {
     @Produces("multipart/related;type=application/dicom+xml")
     public void retrieveStudyMetadataAsXML(
             @PathParam("studyUID") String studyUID,
+            @QueryParam("includefields") String includefields,
             @Suspended AsyncResponse ar) {
-        retrieve("retrieveStudyMetadataAsXML", studyUID, null, null, null, null, ar, Output.METADATA_XML);
+        retrieve("retrieveStudyMetadataAsXML", studyUID, null, null, null, null, includefields, ar, Output.METADATA_XML);
     }
 
     @GET
@@ -176,7 +178,7 @@ public class WadoRS {
             @PathParam("studyUID") String studyUID,
             @PathParam("seriesUID") String seriesUID,
             @Suspended AsyncResponse ar) {
-        retrieve("retrieveSeries", studyUID, seriesUID, null, null, null, ar, Output.DICOM);
+        retrieve("retrieveSeries", studyUID, seriesUID, null, null, null, null, ar, Output.DICOM);
     }
 
     @GET
@@ -186,7 +188,7 @@ public class WadoRS {
             @PathParam("studyUID") String studyUID,
             @PathParam("seriesUID") String seriesUID,
             @Suspended AsyncResponse ar) {
-        retrieve("retrieveSeriesBulkdata", studyUID, seriesUID, null, null, null, ar, Output.BULKDATA);
+        retrieve("retrieveSeriesBulkdata", studyUID, seriesUID, null, null, null, null, ar, Output.BULKDATA);
     }
 
     @GET
@@ -195,8 +197,9 @@ public class WadoRS {
     public void retrieveSeriesMetadataAsJSON(
             @PathParam("studyUID") String studyUID,
             @PathParam("seriesUID") String seriesUID,
+            @QueryParam("includefields") String includefields,
             @Suspended AsyncResponse ar) {
-        retrieve("retrieveSeriesMetadataAsJSON", studyUID, seriesUID, null, null, null, ar, Output.METADATA_JSON);
+        retrieve("retrieveSeriesMetadataAsJSON", studyUID, seriesUID, null, null, null, includefields, ar, Output.METADATA_JSON);
     }
 
     @GET
@@ -205,8 +208,9 @@ public class WadoRS {
     public void retrieveSeriesMetadataAsXML(
             @PathParam("studyUID") String studyUID,
             @PathParam("seriesUID") String seriesUID,
+            @QueryParam("includefields") String includefields,
             @Suspended AsyncResponse ar) {
-        retrieve("retrieveSeriesMetadataAsXML", studyUID, seriesUID, null, null, null, ar, Output.METADATA_XML);
+        retrieve("retrieveSeriesMetadataAsXML", studyUID, seriesUID, null, null, null, includefields, ar, Output.METADATA_XML);
     }
 
     @GET
@@ -217,7 +221,7 @@ public class WadoRS {
             @PathParam("seriesUID") String seriesUID,
             @PathParam("objectUID") String objectUID,
             @Suspended AsyncResponse ar) {
-        retrieve("retrieveInstance", studyUID, seriesUID, objectUID, null, null, ar, Output.DICOM);
+        retrieve("retrieveInstance", studyUID, seriesUID, objectUID, null, null, null, ar, Output.DICOM);
     }
 
     @GET
@@ -228,7 +232,7 @@ public class WadoRS {
             @PathParam("seriesUID") String seriesUID,
             @PathParam("objectUID") String objectUID,
             @Suspended AsyncResponse ar) {
-        retrieve("retrieveInstanceBulkdata", studyUID, seriesUID, objectUID, null, null, ar, Output.BULKDATA);
+        retrieve("retrieveInstanceBulkdata", studyUID, seriesUID, objectUID, null, null, null, ar, Output.BULKDATA);
     }
 
     @GET
@@ -241,7 +245,7 @@ public class WadoRS {
             @PathParam("attributePath") @ValidValueOf(type = AttributePath.class) String attributePath,
             @Suspended AsyncResponse ar) {
         retrieve("retrieveBulkdata", studyUID, seriesUID, objectUID,
-                null, new AttributePath(attributePath).path, ar, Output.BULKDATA_PATH);
+                null, new AttributePath(attributePath).path, null, ar, Output.BULKDATA_PATH);
     }
 
     @GET
@@ -254,7 +258,7 @@ public class WadoRS {
             @PathParam("frameList") @ValidValueOf(type = FrameList.class) String frameList,
             @Suspended AsyncResponse ar) {
         retrieve("retrieveFrames", studyUID, seriesUID, objectUID,
-                new FrameList(frameList).frames, null, ar, Output.BULKDATA_FRAME);
+                new FrameList(frameList).frames, null, null, ar, Output.BULKDATA_FRAME);
     }
 
 /*
@@ -309,8 +313,9 @@ public class WadoRS {
             @PathParam("studyUID") String studyUID,
             @PathParam("seriesUID") String seriesUID,
             @PathParam("objectUID") String objectUID,
+            @QueryParam("includefields") String includefields,
             @Suspended AsyncResponse ar) {
-        retrieve("retrieveInstanceMetadataAsJSON", studyUID, seriesUID, objectUID, null, null, ar,
+        retrieve("retrieveInstanceMetadataAsJSON", studyUID, seriesUID, objectUID, null, null, includefields, ar,
                 Output.METADATA_JSON);
     }
 
@@ -321,12 +326,13 @@ public class WadoRS {
             @PathParam("studyUID") String studyUID,
             @PathParam("seriesUID") String seriesUID,
             @PathParam("objectUID") String objectUID,
+            @QueryParam("includefields") String includefields,
             @Suspended AsyncResponse ar) {
-        retrieve("retrieveInstanceMetadataAsXML", studyUID, seriesUID, objectUID, null, null, ar, Output.METADATA_XML);
+        retrieve("retrieveInstanceMetadataAsXML", studyUID, seriesUID, objectUID, null, null, includefields, ar, Output.METADATA_XML);
     }
 
     private void retrieve(String method, String studyUID, String seriesUID, String objectUID, int[] frameList,
-                          int[] attributePath, AsyncResponse ar, Output output) {
+                          int[] attributePath, String includefields, AsyncResponse ar, Output output) {
         LOG.info("Process GET {} from {}@{}", this, request.getRemoteUser(), request.getRemoteHost());
         try {
             checkAET();
@@ -335,34 +341,77 @@ public class WadoRS {
             // s. https://issues.jboss.org/browse/RESTEASY-903
             HttpServletRequest request = ResteasyProviderFactory.getContextData(HttpServletRequest.class);
             final RetrieveContext ctx = service.newRetrieveContextWADO(request, aet, studyUID, seriesUID, objectUID);
-            service.calculateMatches(ctx);
-            LOG.info("{}: {} Matches", method, ctx.getNumberOfMatches());
-            if (ctx.getNumberOfMatches() == 0)
+            if (output.isMetadata()) {
+                ctx.setObjectType(null);
+                ctx.setMetadataFilter(getMetadataFilter(includefields));
+            }
+
+            if (request.getHeader(HttpHeaders.IF_MODIFIED_SINCE) == null && request.getHeader(HttpHeaders.IF_UNMODIFIED_SINCE) == null
+                    && request.getHeader(HttpHeaders.IF_MATCH) == null && request.getHeader(HttpHeaders.IF_NONE_MATCH) == null) {
+                buildResponse(method, frameList, attributePath, ar, output, ctx, null);
+                return;
+            }
+
+            Date lastModified = service.getLastModified(ctx);
+            if (lastModified == null)
                 throw new WebApplicationException(Response.Status.NOT_FOUND);
-//            Collection<InstanceLocations> notAccessable = service.removeNotAccessableMatches(ctx);
-            Collection<InstanceLocations> notAccepted = output.removeNotAcceptedMatches(this, ctx);
-            if (ctx.getMatches().isEmpty())
-                throw new WebApplicationException(
-                        notAccepted.isEmpty() ? Response.Status.NOT_FOUND : Response.Status.NOT_ACCEPTABLE);
-            retrieveStart.fire(ctx);
-            ar.register(new CompletionCallback() {
-                @Override
-                public void onComplete(Throwable throwable) {
-                    SafeClose.close(compressedMFPixelDataOutput);
-                    SafeClose.close(uncompressedFramesOutput);
-                    SafeClose.close(compressedFramesOutput);
-                    SafeClose.close(decompressFramesOutput);
-                    purgeSpoolDirectory();
-                    ctx.setException(throwable);
-                    retrieveEnd.fire(ctx);
-                }
-            });
-            responseStatus = notAccepted.isEmpty() ? Response.Status.OK : Response.Status.PARTIAL_CONTENT;
-            Object entity = output.entity(this, ctx, frameList, attributePath);
-            ar.resume(Response.status(responseStatus).entity(entity).build());
+            Response.ResponseBuilder respBuilder = evaluatePreConditions(lastModified);
+
+            if (respBuilder == null)
+                buildResponse(method, frameList, attributePath, ar, output, ctx, lastModified);
+            else
+                ar.resume(respBuilder.build());
         } catch (Exception e) {
             ar.resume(e);
         }
+    }
+
+    private MetadataFilter getMetadataFilter(String name) {
+        if (name == null)
+            return null;
+
+        MetadataFilter filter = device.getDeviceExtension(ArchiveDeviceExtension.class).getMetadataFilter(name);
+        if (filter == null)
+            LOG.info("No Metadata filter configured for includefields={}", name);
+        return filter;
+    }
+
+    private void buildResponse(String method, int[] frameList, int[] attributePath, AsyncResponse ar, Output output,
+                               final RetrieveContext ctx, Date lastModified) throws IOException {
+        service.calculateMatches(ctx);
+        LOG.info("{}: {} Matches", method, ctx.getNumberOfMatches());
+        if (ctx.getNumberOfMatches() == 0)
+            throw new WebApplicationException(Response.Status.NOT_FOUND);
+//            Collection<InstanceLocations> notAccessable = service.removeNotAccessableMatches(ctx);
+        Collection<InstanceLocations> notAccepted = output.removeNotAcceptedMatches(this, ctx);
+        if (ctx.getMatches().isEmpty())
+            throw new WebApplicationException(
+                    notAccepted.isEmpty() ? Response.Status.NOT_FOUND : Response.Status.NOT_ACCEPTABLE);
+
+        if (lastModified == null)
+            lastModified = service.getLastModifiedFromMatches(ctx);
+
+        retrieveStart.fire(ctx);
+        ar.register(new CompletionCallback() {
+            @Override
+            public void onComplete(Throwable throwable) {
+                SafeClose.close(compressedMFPixelDataOutput);
+                SafeClose.close(uncompressedFramesOutput);
+                SafeClose.close(compressedFramesOutput);
+                SafeClose.close(decompressFramesOutput);
+                purgeSpoolDirectory();
+                ctx.setException(throwable);
+                retrieveEnd.fire(ctx);
+            }
+        });
+        responseStatus = notAccepted.isEmpty() ? Response.Status.OK : Response.Status.PARTIAL_CONTENT;
+        Object entity = output.entity(this, ctx, frameList, attributePath);
+        ar.resume(Response.status(responseStatus).lastModified(lastModified)
+                .tag(String.valueOf(lastModified.hashCode())).entity(entity).build());
+    }
+
+    private Response.ResponseBuilder evaluatePreConditions(Date lastModified) {
+        return req.evaluatePreconditions(lastModified, new EntityTag(String.valueOf(lastModified.hashCode())));
     }
 
     private void checkAET() {
@@ -438,6 +487,10 @@ public class WadoRS {
                                    InstanceLocations inst, int[] frameList, int[] attributePath) {
                 wadoRS.writeMetadataXML(output, ctx, inst);
             }
+            @Override
+            public boolean isMetadata() {
+                return true;
+            }
         },
         METADATA_JSON {
             @Override
@@ -447,6 +500,10 @@ public class WadoRS {
             @Override
             public Object entity(WadoRS wadoRS, RetrieveContext ctx, int[] frameList, int[] attributePath) {
                 return wadoRS.writeMetadataJSON(ctx);
+            }
+            @Override
+            public boolean isMetadata() {
+                return true;
             }
         };
 
@@ -496,6 +553,9 @@ public class WadoRS {
              throw new WebApplicationException(name() + " not implemented", Response.Status.SERVICE_UNAVAILABLE);
         }
 
+        public boolean isMetadata() {
+            return false;
+        }
     }
 
     private void writeBulkdata(MultipartRelatedOutput output, RetrieveContext ctx, InstanceLocations inst) {
@@ -696,7 +756,7 @@ public class WadoRS {
                     public void write(OutputStream out) throws IOException,
                             WebApplicationException {
                         try {
-                            SAXTransformer.getSAXWriter(new StreamResult(out)).write(loadAttrsWithBulkdataURI(ctx, inst));
+                            SAXTransformer.getSAXWriter(new StreamResult(out)).write(loadMetadata(ctx, inst));
                         } catch (Exception e) {
                             throw new WebApplicationException(e);
                         }
@@ -716,7 +776,7 @@ public class WadoRS {
                     JSONWriter writer = new JSONWriter(gen);
                     gen.writeStartArray();
                     for (InstanceLocations inst : insts) {
-                        writer.write(loadAttrsWithBulkdataURI(ctx, inst));
+                        writer.write(loadMetadata(ctx, inst));
                     }
                     gen.writeEnd();
                     gen.flush();
@@ -727,37 +787,49 @@ public class WadoRS {
         };
     }
 
-    private Attributes loadAttrsWithBulkdataURI(RetrieveContext ctx, InstanceLocations inst) throws Exception {
-        Attributes attrs;
-        final ArrayList<BulkData> bulkDataList = new ArrayList<>();
-        StringBuffer sb = request.getRequestURL();
+    private Attributes loadMetadata(RetrieveContext ctx, InstanceLocations inst) throws IOException {
+        Attributes metadata = inst.isContainsMetadata() ? inst.getAttributes() : service.loadMetadata(ctx, inst);
+        StringBuffer sb = device.getDeviceExtension(ArchiveDeviceExtension.class).remapRetrieveURL(request);
         sb.setLength(sb.lastIndexOf("/metadata"));
         mkInstanceURL(sb, inst);
-        try (DicomInputStream dis = service.openDicomInputStream(ctx, inst)) {
-            dis.setIncludeBulkData(DicomInputStream.IncludeBulkData.URI);
-            dis.setBulkDataCreator(new BulkDataCreator() {
+        if (ctx.getMetadataFilter() != null)
+            metadata = new Attributes(metadata, ctx.getMetadataFilter().getSelection());
+        setBulkdataURI(metadata, sb.toString());
+        return metadata;
+    }
+
+    private void setBulkdataURI(Attributes attrs, String retrieveURL)
+            throws IOException {
+        try {
+            final List<ItemPointer> itemPointers = new ArrayList<>(4);
+            attrs.accept(new Attributes.SequenceVisitor() {
                 @Override
-                public BulkData createBulkData(DicomInputStream dis) throws IOException {
-                    BulkData bulkData = new BulkData(null, dis.getAttributePath(), dis.bigEndian());
-                    dis.skipFully(dis.length());
-                    bulkDataList.add(bulkData);
-                    return bulkData;
+                public void startItem(int sqTag, int itemIndex) {
+                    itemPointers.add(new ItemPointer(sqTag, itemIndex));
                 }
-            });
-            attrs = dis.readDataset(-1, Tag.PixelData);
-            if (dis.tag() == Tag.PixelData) {
-                attrs.setValue(Tag.PixelData, dis.vr(), new BulkData(null, sb.toString(), dis.bigEndian()));
-            }
+
+                @Override
+                public void endItem() {
+                    itemPointers.remove(itemPointers.size()-1);
+                }
+
+                @Override
+                public boolean visit(Attributes attrs, int tag, VR vr, Object value) {
+                    if (value instanceof BulkData) {
+                        BulkData bulkData = (BulkData) value;
+                        if (tag == Tag.PixelData && itemPointers.isEmpty()) {
+                            bulkData.setURI(retrieveURL);
+                        } else {
+                            bulkData.setURI(retrieveURL + "/bulkdata"
+                                    + DicomInputStream.toAttributePath(itemPointers, tag));
+                        }
+                    }
+                    return true;
+                }
+            }, true);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
         }
-        sb.append("/bulkdata");
-        int length = sb.length();
-        for (BulkData bulkData : bulkDataList) {
-            sb.append(bulkData.getURI());
-            bulkData.setURI(sb.toString());
-            sb.setLength(length);
-        }
-        service.getAttributesCoercion(ctx, inst).coerce(attrs, null);
-        return attrs;
     }
 
     private void mkInstanceURL(StringBuffer sb, InstanceLocations inst) {

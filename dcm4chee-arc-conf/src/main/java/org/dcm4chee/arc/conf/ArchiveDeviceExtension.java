@@ -41,12 +41,16 @@
 package org.dcm4chee.arc.conf;
 
 import org.dcm4che3.data.Code;
-import org.dcm4che3.data.Tag;
+
+import java.time.LocalTime;
+
 import org.dcm4che3.net.DeviceExtension;
 import org.dcm4che3.soundex.FuzzyStr;
 import org.dcm4che3.util.StringUtils;
 
+import javax.servlet.http.HttpServletRequest;
 import java.util.*;
+import java.util.regex.Pattern;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
@@ -55,12 +59,23 @@ import java.util.*;
  */
 public class ArchiveDeviceExtension extends DeviceExtension {
 
+    private String defaultCharacterSet;
     private String fuzzyAlgorithmClass;
-
     private String storageID;
+    private String metadataStorageID;
+    private String seriesMetadataStorageID;
+    private Duration seriesMetadataDelay;
+    private Duration seriesMetadataPollingInterval;
+    private int seriesMetadataFetchSize = 100;
+    private Duration purgeInstanceRecordsDelay;
+    private Duration purgeInstanceRecordsPollingInterval;
+    private int purgeInstanceRecordsFetchSize = 100;
     private OverwritePolicy overwritePolicy;
+    private ShowPatientInfo showPatientInfoInSystemLog;
+    private ShowPatientInfo showPatientInfoInAuditLog;
     private String bulkDataSpoolDirectory;
     private String queryRetrieveViewID;
+    private boolean validateCallingAEHostname = false;
     private boolean sendPendingCGet = false;
     private Duration sendPendingCMoveInterval;
     private boolean personNameComponentOrderInsensitiveMatching = false;
@@ -69,6 +84,7 @@ public class ArchiveDeviceExtension extends DeviceExtension {
     private String wadoSR2TextTemplateURI;
     private String patientUpdateTemplateURI;
     private String importReportTemplateURI;
+    private String scheduleProcedureTemplateURI;
     private String unzipVendorDataToURI;
     private String[] mppsForwardDestinations = {};
     private String[] ianDestinations = {};
@@ -79,7 +95,9 @@ public class ArchiveDeviceExtension extends DeviceExtension {
     private int ianTaskFetchSize = 100;
     private String fallbackCMoveSCP;
     private String fallbackCMoveSCPDestination;
+    private String fallbackCMoveSCPLeadingCFindSCP;
     private int fallbackCMoveSCPRetries;
+    private String externalRetrieveAEDestination;
     private String alternativeCMoveSCP;
     private Duration exportTaskPollingInterval;
     private int exportTaskFetchSize = 5;
@@ -99,20 +117,72 @@ public class ArchiveDeviceExtension extends DeviceExtension {
     private String stowSpoolDirectory;
     private String wadoSpoolDirectory;
     private Duration purgeQueueMessagePollingInterval;
-    private int purgeQueueMessageFetchSize = 100;
+    private Duration purgeStgCmtPollingInterval;
+    private Duration purgeStgCmtCompletedDelay;
+    private SPSStatus[] hideSPSWithStatusFrom = {};
+    private String hl7LogFilePattern;
+    private String hl7ErrorLogFilePattern;
+    private Duration rejectExpiredStudiesPollingInterval;
+    private LocalTime rejectExpiredStudiesPollingStartTime;
+    private int rejectExpiredStudiesFetchSize = 0;
+    private int rejectExpiredSeriesFetchSize = 0;
+    private String rejectExpiredStudiesAETitle;
+    private String fallbackCMoveSCPStudyOlderThan;
+    private String storePermissionServiceURL;
+    private Pattern storePermissionServiceResponsePattern;
+    private Pattern storePermissionServiceExpirationDatePattern;
+    private Pattern storePermissionServiceErrorCommentPattern;
+    private Pattern storePermissionServiceErrorCodePattern;
+    private Duration storePermissionCacheStaleTimeout;
+    private int storePermissionCacheSize = 10;
+    private Duration mergeMWLCacheStaleTimeout;
+    private int mergeMWLCacheSize = 10;
+    private int storeUpdateDBMaxRetries = 1;
+    private int storeUpdateDBMaxRetryDelay = 1000;
+    private AllowRejectionForDataRetentionPolicyExpired allowRejectionForDataRetentionPolicyExpired;
+    private AcceptMissingPatientID acceptMissingPatientID;
+    private AllowDeleteStudyPermanently allowDeleteStudyPermanently;
+    private AcceptConflictingPatientID acceptConflictingPatientID;
+    private String[] retrieveAETitles = {};
+    private String remapRetrieveURL;
+    private String remapRetrieveURLClientHost;
+    private String hl7PSUSendingApplication;
+    private String[] hl7PSUReceivingApplications = {};
+    private Duration hl7PSUDelay;
+    private Duration hl7PSUTimeout;
+    private boolean hl7PSUOnTimeout;
+    private int hl7PSUTaskFetchSize = 100;
+    private Duration hl7PSUTaskPollingInterval;
+    private boolean hl7PSUMWL = false;
 
     private final HashSet<String> wadoSupportedSRClasses = new HashSet<>();
     private final EnumMap<Entity,AttributeFilter> attributeFilters = new EnumMap<>(Entity.class);
-    private QueryRetrieveView[] queryRetrieveViews = {};
+    private final Map<String,MetadataFilter> metadataFilters = new HashMap<>();
+    private final EnumMap<IDGenerator.Name,IDGenerator> idGenerators = new EnumMap<>(IDGenerator.Name.class);
+    private final Map<String, QueryRetrieveView> queryRetrieveViewMap = new HashMap<>();
     private final Map<String, StorageDescriptor> storageDescriptorMap = new HashMap<>();
     private final Map<String, QueueDescriptor> queueDescriptorMap = new HashMap<>();
     private final Map<String, ExporterDescriptor> exporterDescriptorMap = new HashMap<>();
     private final Map<String, RejectionNote> rejectionNoteMap = new HashMap<>();
     private final ArrayList<ExportRule> exportRules = new ArrayList<>();
+    private final ArrayList<RSForwardRule> rsForwardRules = new ArrayList<>();
+    private final ArrayList<HL7ForwardRule> hl7ForwardRules = new ArrayList<>();
+    private final ArrayList<HL7OrderScheduledStation> hl7OrderScheduledStations = new ArrayList<>();
+    private final EnumMap<SPSStatus,HL7OrderSPSStatus> hl7OrderSPSStatuses = new EnumMap<>(SPSStatus.class);
     private final ArrayList<ArchiveCompressionRule> compressionRules = new ArrayList<>();
-
+    private final ArrayList<StudyRetentionPolicy> studyRetentionPolicies = new ArrayList<>();
     private final ArrayList<ArchiveAttributeCoercion> attributeCoercions = new ArrayList<>();
+    private final ArrayList<StoreAccessControlIDRule> storeAccessControlIDRules = new ArrayList<>();
+
     private transient FuzzyStr fuzzyStr;
+
+    public String getDefaultCharacterSet() {
+        return defaultCharacterSet;
+    }
+
+    public void setDefaultCharacterSet(String defaultCharacterSet) {
+        this.defaultCharacterSet = defaultCharacterSet;
+    }
 
     public String getFuzzyAlgorithmClass() {
         return fuzzyAlgorithmClass;
@@ -150,6 +220,38 @@ public class ArchiveDeviceExtension extends DeviceExtension {
         this.overwritePolicy = overwritePolicy;
     }
 
+    public ShowPatientInfo getShowPatientInfoInSystemLog() {
+        return showPatientInfoInSystemLog;
+    }
+
+    public ShowPatientInfo showPatientInfoInSystemLog() {
+        return showPatientInfoInSystemLog != null ? showPatientInfoInSystemLog : ShowPatientInfo.PLAIN_TEXT;
+    }
+
+    public void setShowPatientInfoInSystemLog(ShowPatientInfo showPatientInfoInSystemLog) {
+        this.showPatientInfoInSystemLog = showPatientInfoInSystemLog;
+    }
+
+    public ShowPatientInfo getShowPatientInfoInAuditLog() {
+        return showPatientInfoInAuditLog;
+    }
+
+    public void setShowPatientInfoInAuditLog(ShowPatientInfo showPatientInfoInAuditLog) {
+        this.showPatientInfoInAuditLog = showPatientInfoInAuditLog;
+    }
+
+    public ShowPatientInfo showPatientInfoInAuditLog() {
+        return showPatientInfoInAuditLog != null ? showPatientInfoInAuditLog : ShowPatientInfo.PLAIN_TEXT;
+    }
+
+    public AcceptMissingPatientID getAcceptMissingPatientID() {
+        return acceptMissingPatientID;
+    }
+
+    public void setAcceptMissingPatientID(AcceptMissingPatientID acceptMissingPatientID) {
+        this.acceptMissingPatientID = acceptMissingPatientID;
+    }
+
     public String getBulkDataSpoolDirectory() {
         return bulkDataSpoolDirectory;
     }
@@ -166,6 +268,70 @@ public class ArchiveDeviceExtension extends DeviceExtension {
         this.storageID = storageID;
     }
 
+    public String getMetadataStorageID() {
+        return metadataStorageID;
+    }
+
+    public void setMetadataStorageID(String metadataStorageID) {
+        this.metadataStorageID = metadataStorageID;
+    }
+
+    public String getSeriesMetadataStorageID() {
+        return seriesMetadataStorageID;
+    }
+
+    public void setSeriesMetadataStorageID(String seriesMetadataStorageID) {
+        this.seriesMetadataStorageID = seriesMetadataStorageID;
+    }
+
+    public Duration getSeriesMetadataDelay() {
+        return seriesMetadataDelay;
+    }
+
+    public void setSeriesMetadataDelay(Duration seriesMetadataDelay) {
+        this.seriesMetadataDelay = seriesMetadataDelay;
+    }
+
+    public Duration getSeriesMetadataPollingInterval() {
+        return seriesMetadataPollingInterval;
+    }
+
+    public void setSeriesMetadataPollingInterval(Duration seriesMetadataPollingInterval) {
+        this.seriesMetadataPollingInterval = seriesMetadataPollingInterval;
+    }
+
+    public int getSeriesMetadataFetchSize() {
+        return seriesMetadataFetchSize;
+    }
+
+    public void setSeriesMetadataFetchSize(int seriesMetadataFetchSize) {
+        this.seriesMetadataFetchSize =  greaterZero(seriesMetadataFetchSize, "seriesMetadataFetchSize");
+    }
+
+    public Duration getPurgeInstanceRecordsDelay() {
+        return purgeInstanceRecordsDelay;
+    }
+
+    public void setPurgeInstanceRecordsDelay(Duration purgeInstanceRecordsDelay) {
+        this.purgeInstanceRecordsDelay = purgeInstanceRecordsDelay;
+    }
+
+    public Duration getPurgeInstanceRecordsPollingInterval() {
+        return purgeInstanceRecordsPollingInterval;
+    }
+
+    public void setPurgeInstanceRecordsPollingInterval(Duration purgeInstanceRecordsPollingInterval) {
+        this.purgeInstanceRecordsPollingInterval = purgeInstanceRecordsPollingInterval;
+    }
+
+    public int getPurgeInstanceRecordsFetchSize() {
+        return purgeInstanceRecordsFetchSize;
+    }
+
+    public void setPurgeInstanceRecordsFetchSize(int purgeInstanceRecordsFetchSize) {
+        this.purgeInstanceRecordsFetchSize =  greaterZero(purgeInstanceRecordsFetchSize, "purgeInstanceRecordsFetchSize");
+    }
+
     public String getQueryRetrieveViewID() {
         return queryRetrieveViewID;
     }
@@ -180,6 +346,14 @@ public class ArchiveDeviceExtension extends DeviceExtension {
 
     public void setPersonNameComponentOrderInsensitiveMatching(boolean personNameComponentOrderInsensitiveMatching) {
         this.personNameComponentOrderInsensitiveMatching = personNameComponentOrderInsensitiveMatching;
+    }
+
+    public boolean isValidateCallingAEHostname() {
+        return validateCallingAEHostname;
+    }
+
+    public void setValidateCallingAEHostname(boolean validateCallingAEHostname) {
+        this.validateCallingAEHostname = validateCallingAEHostname;
     }
 
     public boolean isSendPendingCGet() {
@@ -243,6 +417,14 @@ public class ArchiveDeviceExtension extends DeviceExtension {
         this.importReportTemplateURI = importReportTemplateURI;
     }
 
+    public String getScheduleProcedureTemplateURI() {
+        return scheduleProcedureTemplateURI;
+    }
+
+    public void setScheduleProcedureTemplateURI(String scheduleProcedureTemplateURI) {
+        this.scheduleProcedureTemplateURI = scheduleProcedureTemplateURI;
+    }
+
     public String getUnzipVendorDataToURI() {
         return unzipVendorDataToURI;
     }
@@ -304,7 +486,7 @@ public class ArchiveDeviceExtension extends DeviceExtension {
     }
 
     public void setIanTaskFetchSize(int ianTaskFetchSize) {
-        this.ianTaskFetchSize = ianTaskFetchSize;
+        this.ianTaskFetchSize = greaterZero(ianTaskFetchSize, "ianTaskFetchSize");
     }
 
     public String getFallbackCMoveSCP() {
@@ -323,12 +505,28 @@ public class ArchiveDeviceExtension extends DeviceExtension {
         this.fallbackCMoveSCPDestination = fallbackCMoveSCPDestination;
     }
 
+    public String getFallbackCMoveSCPLeadingCFindSCP() {
+        return fallbackCMoveSCPLeadingCFindSCP;
+    }
+
+    public void setFallbackCMoveSCPLeadingCFindSCP(String fallbackCMoveSCPLeadingCFindSCP) {
+        this.fallbackCMoveSCPLeadingCFindSCP = fallbackCMoveSCPLeadingCFindSCP;
+    }
+
     public int getFallbackCMoveSCPRetries() {
         return fallbackCMoveSCPRetries;
     }
 
     public void setFallbackCMoveSCPRetries(int fallbackCMoveSCPRetries) {
         this.fallbackCMoveSCPRetries = fallbackCMoveSCPRetries;
+    }
+
+    public String getExternalRetrieveAEDestination() {
+        return externalRetrieveAEDestination;
+    }
+
+    public void setExternalRetrieveAEDestination(String externalRetrieveAEDestination) {
+        this.externalRetrieveAEDestination = externalRetrieveAEDestination;
     }
 
     public String getAlternativeCMoveSCP() {
@@ -352,7 +550,7 @@ public class ArchiveDeviceExtension extends DeviceExtension {
     }
 
     public void setExportTaskFetchSize(int exportTaskFetchSize) {
-        this.exportTaskFetchSize = exportTaskFetchSize;
+        this.exportTaskFetchSize = greaterZero(exportTaskFetchSize, "exportTaskFetchSize");
     }
 
     public Duration getExportTaskPollingInterval() {
@@ -376,9 +574,9 @@ public class ArchiveDeviceExtension extends DeviceExtension {
     }
 
     public void setDeleteRejectedFetchSize(int deleteRejectedFetchSize) {
-        this.deleteRejectedFetchSize = deleteRejectedFetchSize;
-    }
+        this.deleteRejectedFetchSize =  greaterZero(deleteRejectedFetchSize, "deleteRejectedFetchSize");
 
+    }
     public Duration getPurgeStoragePollingInterval() {
         return purgeStoragePollingInterval;
     }
@@ -392,7 +590,7 @@ public class ArchiveDeviceExtension extends DeviceExtension {
     }
 
     public void setPurgeStorageFetchSize(int purgeStorageFetchSize) {
-        this.purgeStorageFetchSize = purgeStorageFetchSize;
+        this.purgeStorageFetchSize = greaterZero(purgeStorageFetchSize, "purgeStorageFetchSize");
     }
 
     public int getDeleteStudyBatchSize() {
@@ -400,7 +598,7 @@ public class ArchiveDeviceExtension extends DeviceExtension {
     }
 
     public void setDeleteStudyBatchSize(int deleteStudyBatchSize) {
-        this.deleteStudyBatchSize = deleteStudyBatchSize;
+        this.deleteStudyBatchSize = greaterZero(deleteStudyBatchSize, "deleteStudyBatchSize");
     }
 
     public boolean isDeletePatientOnDeleteLastStudy() {
@@ -452,7 +650,8 @@ public class ArchiveDeviceExtension extends DeviceExtension {
     }
 
     public void setLeadingCFindSCPQueryCacheSize(int leadingCFindSCPQueryCacheSize) {
-        this.leadingCFindSCPQueryCacheSize = leadingCFindSCPQueryCacheSize;
+        this.leadingCFindSCPQueryCacheSize =
+                greaterZero(leadingCFindSCPQueryCacheSize, "leadingCFindSCPQueryCacheSize");
     }
 
     public String getAuditSpoolDirectory() {
@@ -499,6 +698,72 @@ public class ArchiveDeviceExtension extends DeviceExtension {
         this.wadoSpoolDirectory = wadoSpoolDirectory;
     }
 
+    public String getHl7LogFilePattern() {
+        return hl7LogFilePattern;
+    }
+
+    public void setHl7LogFilePattern(String hl7LogFilePattern) {
+        this.hl7LogFilePattern = hl7LogFilePattern;
+    }
+
+    public String getHl7ErrorLogFilePattern() {
+        return hl7ErrorLogFilePattern;
+    }
+
+    public void setHl7ErrorLogFilePattern(String hl7ErrorLogFilePattern) {
+        this.hl7ErrorLogFilePattern = hl7ErrorLogFilePattern;
+    }
+
+    public int getRejectExpiredStudiesFetchSize() {
+        return rejectExpiredStudiesFetchSize;
+    }
+
+    public void setRejectExpiredStudiesFetchSize(int rejectExpiredStudiesFetchSize) {
+        this.rejectExpiredStudiesFetchSize =
+                greaterZero(rejectExpiredStudiesFetchSize, "rejectExpiredStudiesFetchSize");
+    }
+
+    public int getRejectExpiredSeriesFetchSize() {
+        return rejectExpiredSeriesFetchSize;
+    }
+
+    public void setRejectExpiredSeriesFetchSize(int rejectExpiredSeriesFetchSize) {
+        this.rejectExpiredSeriesFetchSize =
+                greaterZero(rejectExpiredSeriesFetchSize, "rejectExpiredSeriesFetchSize");;
+    }
+
+    public Duration getRejectExpiredStudiesPollingInterval() {
+        return rejectExpiredStudiesPollingInterval;
+    }
+
+    public void setRejectExpiredStudiesPollingInterval(Duration rejectExpiredStudiesPollingInterval) {
+        this.rejectExpiredStudiesPollingInterval = rejectExpiredStudiesPollingInterval;
+    }
+
+    public LocalTime getRejectExpiredStudiesPollingStartTime() {
+        return rejectExpiredStudiesPollingStartTime;
+    }
+
+    public void setRejectExpiredStudiesPollingStartTime(LocalTime rejectExpiredStudiesPollingStartTime) {
+        this.rejectExpiredStudiesPollingStartTime = rejectExpiredStudiesPollingStartTime;
+    }
+
+    public String getRejectExpiredStudiesAETitle() {
+        return rejectExpiredStudiesAETitle;
+    }
+
+    public void setRejectExpiredStudiesAETitle(String rejectExpiredStudiesAETitle) {
+        this.rejectExpiredStudiesAETitle = rejectExpiredStudiesAETitle;
+    }
+
+    public String getFallbackCMoveSCPStudyOlderThan() {
+        return fallbackCMoveSCPStudyOlderThan;
+    }
+
+    public void setFallbackCMoveSCPStudyOlderThan(String fallbackCMoveSCPStudyOlderThan) {
+        this.fallbackCMoveSCPStudyOlderThan = fallbackCMoveSCPStudyOlderThan;
+    }
+
     public Duration getPurgeQueueMessagePollingInterval() {
         return purgeQueueMessagePollingInterval;
     }
@@ -507,12 +772,234 @@ public class ArchiveDeviceExtension extends DeviceExtension {
         this.purgeQueueMessagePollingInterval = purgeQueueMessagePollingInterval;
     }
 
-    public int getPurgeQueueMessageFetchSize() {
-        return purgeQueueMessageFetchSize;
+    public Duration getPurgeStgCmtPollingInterval() {
+        return purgeStgCmtPollingInterval;
     }
 
-    public void setPurgeQueueMessageFetchSize(int purgeQueueMessageFetchSize) {
-        this.purgeQueueMessageFetchSize = purgeQueueMessageFetchSize;
+    public void setPurgeStgCmtPollingInterval(Duration purgeStgCmtPollingInterval) {
+        this.purgeStgCmtPollingInterval = purgeStgCmtPollingInterval;
+    }
+
+    public Duration getPurgeStgCmtCompletedDelay() {
+        return purgeStgCmtCompletedDelay;
+    }
+
+    public void setPurgeStgCmtCompletedDelay(Duration purgeStgCmtCompletedDelay) {
+        this.purgeStgCmtCompletedDelay = purgeStgCmtCompletedDelay;
+    }
+
+    public SPSStatus[] getHideSPSWithStatusFrom() {
+        return hideSPSWithStatusFrom;
+    }
+
+    public void setHideSPSWithStatusFrom(SPSStatus[] hideSPSWithStatusFrom) {
+        this.hideSPSWithStatusFrom = hideSPSWithStatusFrom;
+    }
+
+    public String getStorePermissionServiceURL() {
+        return storePermissionServiceURL;
+    }
+
+    public void setStorePermissionServiceURL(String storePermissionServiceURL) {
+        this.storePermissionServiceURL = storePermissionServiceURL;
+    }
+
+    public Pattern getStorePermissionServiceResponsePattern() {
+        return storePermissionServiceResponsePattern;
+    }
+
+    public void setStorePermissionServiceResponsePattern(Pattern storePermissionServiceResponsePattern) {
+        this.storePermissionServiceResponsePattern = storePermissionServiceResponsePattern;
+    }
+
+    public Pattern getStorePermissionServiceExpirationDatePattern() {
+        return storePermissionServiceExpirationDatePattern;
+    }
+
+    public void setStorePermissionServiceExpirationDatePattern(Pattern storePermissionServiceExpirationDatePattern) {
+        this.storePermissionServiceExpirationDatePattern = storePermissionServiceExpirationDatePattern;
+    }
+
+    public Pattern getStorePermissionServiceErrorCommentPattern() {
+        return storePermissionServiceErrorCommentPattern;
+    }
+
+    public void setStorePermissionServiceErrorCommentPattern(Pattern storePermissionServiceErrorCommentPattern) {
+        this.storePermissionServiceErrorCommentPattern = storePermissionServiceErrorCommentPattern;
+    }
+
+    public Pattern getStorePermissionServiceErrorCodePattern() {
+        return storePermissionServiceErrorCodePattern;
+    }
+
+    public void setStorePermissionServiceErrorCodePattern(Pattern storePermissionServiceErrorCodePattern) {
+        this.storePermissionServiceErrorCodePattern = storePermissionServiceErrorCodePattern;
+    }
+
+    public Duration getStorePermissionCacheStaleTimeout() {
+        return storePermissionCacheStaleTimeout;
+    }
+
+    public void setStorePermissionCacheStaleTimeout(Duration storePermissionCacheStaleTimeout) {
+        this.storePermissionCacheStaleTimeout = storePermissionCacheStaleTimeout;
+    }
+
+    public int getStorePermissionCacheStaleTimeoutSeconds() {
+        return toSeconds(storePermissionCacheStaleTimeout);
+    }
+
+    public int getStorePermissionCacheSize() {
+        return storePermissionCacheSize;
+    }
+
+    public void setStorePermissionCacheSize(int storePermissionCacheSize) {
+        this.storePermissionCacheSize = greaterZero(storePermissionCacheSize, "storePermissionCacheSize");
+    }
+
+    public Duration getMergeMWLCacheStaleTimeout() {
+        return mergeMWLCacheStaleTimeout;
+    }
+
+    public void setMergeMWLCacheStaleTimeout(Duration mergeMWLCacheStaleTimeout) {
+        this.mergeMWLCacheStaleTimeout = mergeMWLCacheStaleTimeout;
+    }
+
+    public int getMergeMWLCacheStaleTimeoutSeconds() {
+        return toSeconds(mergeMWLCacheStaleTimeout);
+    }
+
+    public int getMergeMWLCacheSize() {
+        return mergeMWLCacheSize;
+    }
+
+    public void setMergeMWLCacheSize(int mergeMWLCacheSize) {
+        this.mergeMWLCacheSize = greaterZero(mergeMWLCacheSize, "mergeMWLCacheSize");
+    }
+
+    public int getStoreUpdateDBMaxRetries() {
+        return storeUpdateDBMaxRetries;
+    }
+
+    public void setStoreUpdateDBMaxRetries(int storeUpdateDBMaxRetries) {
+        this.storeUpdateDBMaxRetries = storeUpdateDBMaxRetries;
+    }
+
+    public int getStoreUpdateDBMaxRetryDelay() {
+        return storeUpdateDBMaxRetryDelay;
+    }
+
+    public void setStoreUpdateDBMaxRetryDelay(int storeUpdateDBMaxRetryDelay) {
+        this.storeUpdateDBMaxRetryDelay = storeUpdateDBMaxRetryDelay;
+    }
+
+    public AllowRejectionForDataRetentionPolicyExpired getAllowRejectionForDataRetentionPolicyExpired() {
+        return allowRejectionForDataRetentionPolicyExpired;
+    }
+
+    public void setAllowRejectionForDataRetentionPolicyExpired(
+            AllowRejectionForDataRetentionPolicyExpired allowRejectionForDataRetentionPolicyExpired) {
+        this.allowRejectionForDataRetentionPolicyExpired = allowRejectionForDataRetentionPolicyExpired;
+    }
+
+    public String getRemapRetrieveURL() {
+        return remapRetrieveURLClientHost != null
+                ? ('[' + remapRetrieveURLClientHost + ']' + remapRetrieveURL)
+                : remapRetrieveURL;
+    }
+
+    public void setRemapRetrieveURL(String remapRetrieveURL) {
+        if (remapRetrieveURL == null || remapRetrieveURL.charAt(0) != '[') {
+            this.remapRetrieveURL = remapRetrieveURL;
+            this.remapRetrieveURLClientHost = null;
+        } else {
+            String[] ss = StringUtils.split(remapRetrieveURL.substring(1), ']');
+            if (ss.length != 2)
+                throw new IllegalArgumentException(remapRetrieveURL);
+
+            this.remapRetrieveURL = ss[1];
+            this.remapRetrieveURLClientHost = ss[0];
+        }
+    }
+
+    public StringBuffer remapRetrieveURL(HttpServletRequest request) {
+        StringBuffer sb = request.getRequestURL();
+        if (remap(request)) {
+            sb.setLength(0);
+            sb.append(remapRetrieveURL).append(request.getRequestURI());
+        }
+        return sb;
+    }
+
+    private boolean remap(HttpServletRequest request) {
+        return remapRetrieveURL != null
+                && (remapRetrieveURLClientHost == null || remapRetrieveURLClientHost.equals(
+                        StringUtils.isIPAddr(remapRetrieveURLClientHost)
+                                ? request.getRemoteAddr()
+                                : request.getRemoteHost()));
+    }
+
+    public String getHl7PSUSendingApplication() {
+        return hl7PSUSendingApplication;
+    }
+
+    public void setHl7PSUSendingApplication(String hl7PSUSendingApplication) {
+        this.hl7PSUSendingApplication = hl7PSUSendingApplication;
+    }
+
+    public Duration getHl7PSUTaskPollingInterval() {
+        return hl7PSUTaskPollingInterval;
+    }
+
+    public void setHl7PSUTaskPollingInterval(Duration hl7PSUTaskPollingInterval) {
+        this.hl7PSUTaskPollingInterval = hl7PSUTaskPollingInterval;
+    }
+
+    public String[] getHl7PSUReceivingApplications() {
+        return hl7PSUReceivingApplications;
+    }
+
+    public void setHl7PSUReceivingApplications(String[] hl7PSUReceivingApplications) {
+        this.hl7PSUReceivingApplications = hl7PSUReceivingApplications;
+    }
+
+    public Duration getHl7PSUDelay() {
+        return hl7PSUDelay;
+    }
+
+    public void setHl7PSUDelay(Duration hl7PSUDelay) {
+        this.hl7PSUDelay = hl7PSUDelay;
+    }
+
+    public Duration getHl7PSUTimeout() {
+        return hl7PSUTimeout;
+    }
+
+    public void setHl7PSUTimeout(Duration hl7PSUTimeout) {
+        this.hl7PSUTimeout = hl7PSUTimeout;
+    }
+
+    public boolean isHl7PSUOnTimeout() {
+        return hl7PSUOnTimeout;
+    }
+
+    public void setHl7PSUOnTimeout(boolean hl7PSUOnTimeout) {
+        this.hl7PSUOnTimeout = hl7PSUOnTimeout;
+    }
+
+    public int getHl7PSUTaskFetchSize() {
+        return hl7PSUTaskFetchSize;
+    }
+
+    public void setHl7PSUTaskFetchSize(int hl7PSUTaskFetchSize) {
+        this.hl7PSUTaskFetchSize = hl7PSUTaskFetchSize;
+    }
+
+    public boolean isHl7PSUMWL() {
+        return hl7PSUMWL;
+    }
+
+    public void setHl7PSUMWL(boolean hl7PSUMWL) {
+        this.hl7PSUMWL = hl7PSUMWL;
     }
 
     public AttributeFilter getAttributeFilter(Entity entity) {
@@ -527,20 +1014,48 @@ public class ArchiveDeviceExtension extends DeviceExtension {
         attributeFilters.put(entity, filter);
     }
 
-    public QueryRetrieveView[] getQueryRetrieveViews() {
-        return queryRetrieveViews;
+    public Map<Entity, AttributeFilter> getAttributeFilters() {
+        return attributeFilters;
     }
 
-    public void setQueryRetrieveViews(QueryRetrieveView... queryRetrieveViews) {
-        this.queryRetrieveViews = queryRetrieveViews;
+    public MetadataFilter getMetadataFilter(String name) {
+        return metadataFilters.get(name);
+    }
+
+    public void addMetadataFilter(MetadataFilter filter) {
+        metadataFilters.put(filter.getName(), filter);
+    }
+
+    public void removeMetadataFilter(MetadataFilter filter) {
+        metadataFilters.remove(filter.getName());
+    }
+
+    public Map<String, MetadataFilter> getMetadataFilters() {
+        return metadataFilters;
+    }
+
+    public IDGenerator getIDGenerator(IDGenerator.Name name) {
+        IDGenerator filter = idGenerators.get(name);
+        if (filter == null)
+            throw new IllegalArgumentException("No ID Generator for " + name + " configured");
+
+        return filter;
+    }
+
+    public void addIDGenerator(IDGenerator generator) {
+        idGenerators.put(generator.getName(), generator);
+    }
+
+    public void removeIDGenerator(IDGenerator generator) {
+        idGenerators.remove(generator.getName());
+    }
+
+    public Map<IDGenerator.Name, IDGenerator> getIDGenerators() {
+        return idGenerators;
     }
 
     public QueryRetrieveView getQueryRetrieveView(String viewID) {
-        for (QueryRetrieveView view : queryRetrieveViews) {
-            if (view.getViewID().equals(viewID))
-                return view;
-        }
-        return null;
+        return queryRetrieveViewMap.get(viewID);
     }
 
     public QueryRetrieveView getQueryRetrieveViewNotNull(String viewID) {
@@ -548,6 +1063,22 @@ public class ArchiveDeviceExtension extends DeviceExtension {
         if (view == null)
             throw new IllegalArgumentException("No Query Retrieve View configured with ID:" + viewID);
         return view;
+    }
+
+    public QueryRetrieveView removeQueryRetrieveView(String viewID) {
+        return queryRetrieveViewMap.remove(viewID);
+    }
+
+    public void addQueryRetrieveView(QueryRetrieveView view) {
+        queryRetrieveViewMap.put(view.getViewID(), view);
+    }
+
+    public Collection<QueryRetrieveView> getQueryRetrieveViews() {
+        return queryRetrieveViewMap.values();
+    }
+
+    public Collection<String> getQueryRetrieveViewIDs() {
+        return queryRetrieveViewMap.keySet();
     }
 
     public StorageDescriptor getStorageDescriptor(String storageID) {
@@ -571,10 +1102,6 @@ public class ArchiveDeviceExtension extends DeviceExtension {
 
     public Collection<StorageDescriptor> getStorageDescriptors() {
         return storageDescriptorMap.values();
-    }
-
-    public Collection<AttributeFilter> getAttributeFilters() {
-        return attributeFilters.values();
     }
 
     public QueueDescriptor getQueueDescriptor(String queueName) {
@@ -619,6 +1146,12 @@ public class ArchiveDeviceExtension extends DeviceExtension {
         exporterDescriptorMap.put(destination.getExporterID(), destination);
     }
 
+    private int greaterZero(int i, String prompt) {
+        if (i <= 0)
+            throw new IllegalArgumentException(prompt + ": " + i);
+        return i;
+    }
+
     public Collection<ExporterDescriptor> getExporterDescriptors() {
         return exporterDescriptorMap.values();
     }
@@ -639,6 +1172,70 @@ public class ArchiveDeviceExtension extends DeviceExtension {
         return exportRules;
     }
 
+    public void removeRSForwardRule(RSForwardRule rule) {
+        rsForwardRules.remove(rule);
+    }
+
+    public void clearRSForwardRules() {
+        rsForwardRules.clear();
+    }
+
+    public void addRSForwardRule(RSForwardRule rule) {
+        rsForwardRules.add(rule);
+    }
+
+    public Collection<RSForwardRule> getRSForwardRules() {
+        return rsForwardRules;
+    }
+
+    public void removeHL7ForwardRule(HL7ForwardRule rule) {
+        hl7ForwardRules.remove(rule);
+    }
+
+    public void clearHL7ForwardRules() {
+        hl7ForwardRules.clear();
+    }
+
+    public void addHL7ForwardRule(HL7ForwardRule rule) {
+        hl7ForwardRules.add(rule);
+    }
+
+    public Collection<HL7ForwardRule> getHL7ForwardRules() {
+        return hl7ForwardRules;
+    }
+
+    public void removeHL7OrderScheduledStation(HL7OrderScheduledStation scheduledStation) {
+        hl7OrderScheduledStations.remove(scheduledStation);
+    }
+
+    public void clearHL7OrderScheduledStations() {
+        hl7OrderScheduledStations.clear();
+    }
+
+    public void addHL7OrderScheduledStation(HL7OrderScheduledStation scheduledStation) {
+        hl7OrderScheduledStations.add(scheduledStation);
+    }
+
+    public Collection<HL7OrderScheduledStation> getHL7OrderScheduledStations() {
+        return hl7OrderScheduledStations;
+    }
+
+    public void removeHL7OrderSPSStatus(HL7OrderSPSStatus rule) {
+        hl7OrderSPSStatuses.remove(rule.getSPSStatus());
+    }
+
+    public void clearHL7OrderSPSStatuses() {
+        hl7OrderSPSStatuses.clear();
+    }
+
+    public void addHL7OrderSPSStatus(HL7OrderSPSStatus rule) {
+        hl7OrderSPSStatuses.put(rule.getSPSStatus(), rule);
+    }
+
+    public Map<SPSStatus, HL7OrderSPSStatus> getHL7OrderSPSStatuses() {
+        return hl7OrderSPSStatuses;
+    }
+
     public void removeCompressionRule(ArchiveCompressionRule rule) {
         compressionRules.remove(rule);
     }
@@ -653,6 +1250,22 @@ public class ArchiveDeviceExtension extends DeviceExtension {
 
     public Collection<ArchiveCompressionRule> getCompressionRules() {
         return compressionRules;
+    }
+
+    public void removeStudyRetentionPolicy(StudyRetentionPolicy policy) {
+        studyRetentionPolicies.remove(policy);
+    }
+
+    public void clearStudyRetentionPolicies() {
+        studyRetentionPolicies.clear();
+    }
+
+    public void addStudyRetentionPolicy(StudyRetentionPolicy policy) {
+        studyRetentionPolicies.add(policy);
+    }
+
+    public Collection<StudyRetentionPolicy> getStudyRetentionPolicies() {
+        return studyRetentionPolicies;
     }
 
     public void removeAttributeCoercion(ArchiveAttributeCoercion coercion) {
@@ -671,6 +1284,22 @@ public class ArchiveDeviceExtension extends DeviceExtension {
         return attributeCoercions;
     }
 
+    public void removeStoreAccessControlIDRule(StoreAccessControlIDRule storeAccessControlIDRule) {
+        storeAccessControlIDRules.remove(storeAccessControlIDRule);
+    }
+
+    public void clearStoreAccessControlIDRules() {
+        storeAccessControlIDRules.clear();
+    }
+
+    public void addStoreAccessControlIDRule(StoreAccessControlIDRule storeAccessControlIDRule) {
+        storeAccessControlIDRules.add(storeAccessControlIDRule);
+    }
+
+    public ArrayList<StoreAccessControlIDRule> getStoreAccessControlIDRules() {
+        return storeAccessControlIDRules;
+    }
+
     public RejectionNote getRejectionNote(String rjNoteID) {
         return rejectionNoteMap.get(rjNoteID);
     }
@@ -681,6 +1310,14 @@ public class ArchiveDeviceExtension extends DeviceExtension {
                 if (rjNote.getRejectionNoteCode().equalsIgnoreMeaning(code))
                     return rjNote;
             }
+        return null;
+    }
+
+    public RejectionNote getRejectionNote(RejectionNote.Type rejectionNoteType) {
+        for (RejectionNote rejectionNote : rejectionNoteMap.values()) {
+            if (rejectionNote.getRejectionNoteType() == rejectionNoteType)
+                return rejectionNote;
+        }
         return null;
     }
 
@@ -696,16 +1333,52 @@ public class ArchiveDeviceExtension extends DeviceExtension {
         return rejectionNoteMap.values();
     }
 
+    public AllowDeleteStudyPermanently getAllowDeleteStudyPermanently() {
+        return allowDeleteStudyPermanently;
+    }
+
+    public void setAllowDeleteStudyPermanently(AllowDeleteStudyPermanently allowDeleteStudyPermanently) {
+        this.allowDeleteStudyPermanently = allowDeleteStudyPermanently;
+    }
+
+    public AcceptConflictingPatientID getAcceptConflictingPatientID() {
+        return acceptConflictingPatientID;
+    }
+
+    public void setAcceptConflictingPatientID(AcceptConflictingPatientID acceptConflictingPatientID) {
+        this.acceptConflictingPatientID = acceptConflictingPatientID;
+    }
+
+    public String[] getRetrieveAETitles() {
+        return retrieveAETitles;
+    }
+
+    public void setRetrieveAETitles(String... retrieveAETitles) {
+        this.retrieveAETitles = retrieveAETitles;
+    }
+
     @Override
     public void reconfigure(DeviceExtension from) {
         ArchiveDeviceExtension arcdev = (ArchiveDeviceExtension) from;
+        defaultCharacterSet = arcdev.defaultCharacterSet;
         fuzzyAlgorithmClass = arcdev.fuzzyAlgorithmClass;
         fuzzyStr = arcdev.fuzzyStr;
         storageID = arcdev.storageID;
+        metadataStorageID = arcdev.metadataStorageID;
+        seriesMetadataStorageID = arcdev.seriesMetadataStorageID;
+        seriesMetadataDelay = arcdev.seriesMetadataDelay;
+        seriesMetadataPollingInterval = arcdev.seriesMetadataPollingInterval;
+        seriesMetadataFetchSize = arcdev.seriesMetadataFetchSize;
+        purgeInstanceRecordsDelay = arcdev.purgeInstanceRecordsDelay;
+        purgeInstanceRecordsPollingInterval = arcdev.purgeInstanceRecordsPollingInterval;
+        purgeInstanceRecordsFetchSize = arcdev.purgeInstanceRecordsFetchSize;
         overwritePolicy = arcdev.overwritePolicy;
+        showPatientInfoInSystemLog = arcdev.showPatientInfoInSystemLog;
+        showPatientInfoInAuditLog = arcdev.showPatientInfoInAuditLog;
         bulkDataSpoolDirectory = arcdev.bulkDataSpoolDirectory;
         queryRetrieveViewID = arcdev.queryRetrieveViewID;
         personNameComponentOrderInsensitiveMatching = arcdev.personNameComponentOrderInsensitiveMatching;
+        validateCallingAEHostname = arcdev.validateCallingAEHostname;
         sendPendingCGet = arcdev.sendPendingCGet;
         sendPendingCMoveInterval = arcdev.sendPendingCMoveInterval;
         wadoSupportedSRClasses.clear();
@@ -714,8 +1387,10 @@ public class ArchiveDeviceExtension extends DeviceExtension {
         wadoSR2TextTemplateURI = arcdev.wadoSR2TextTemplateURI;
         patientUpdateTemplateURI = arcdev.patientUpdateTemplateURI;
         importReportTemplateURI = arcdev.importReportTemplateURI;
+        scheduleProcedureTemplateURI = arcdev.scheduleProcedureTemplateURI;
         qidoMaxNumberOfResults = arcdev.qidoMaxNumberOfResults;
-        queryRetrieveViews = arcdev.queryRetrieveViews;
+        queryRetrieveViewMap.clear();
+        queryRetrieveViewMap.putAll(arcdev.queryRetrieveViewMap);
         mppsForwardDestinations = arcdev.mppsForwardDestinations;
         ianDestinations = arcdev.ianDestinations;
         ianDelay = arcdev.ianDelay;
@@ -725,7 +1400,9 @@ public class ArchiveDeviceExtension extends DeviceExtension {
         ianTaskFetchSize = arcdev.ianTaskFetchSize;
         fallbackCMoveSCP = arcdev.fallbackCMoveSCP;
         fallbackCMoveSCPDestination = arcdev.fallbackCMoveSCPDestination;
+        fallbackCMoveSCPLeadingCFindSCP = arcdev.fallbackCMoveSCPLeadingCFindSCP;
         fallbackCMoveSCPRetries = arcdev.fallbackCMoveSCPRetries;
+        externalRetrieveAEDestination = arcdev.externalRetrieveAEDestination;
         alternativeCMoveSCP = arcdev.alternativeCMoveSCP;
         exportTaskPollingInterval = arcdev.exportTaskPollingInterval;
         exportTaskFetchSize = arcdev.exportTaskFetchSize;
@@ -744,10 +1421,50 @@ public class ArchiveDeviceExtension extends DeviceExtension {
         auditAggregateDuration = arcdev.auditAggregateDuration;
         stowSpoolDirectory = arcdev.stowSpoolDirectory;
         wadoSpoolDirectory = arcdev.wadoSpoolDirectory;
+        hl7LogFilePattern = arcdev.hl7LogFilePattern;
+        hl7ErrorLogFilePattern = arcdev.hl7ErrorLogFilePattern;
         purgeQueueMessagePollingInterval = arcdev.purgeQueueMessagePollingInterval;
-        purgeQueueMessageFetchSize = arcdev.purgeQueueMessageFetchSize;
+        purgeStgCmtPollingInterval = arcdev.purgeStgCmtPollingInterval;
+        purgeStgCmtCompletedDelay = arcdev.purgeStgCmtCompletedDelay;
+        hideSPSWithStatusFrom = arcdev.hideSPSWithStatusFrom;
+        rejectExpiredStudiesPollingInterval = arcdev.rejectExpiredStudiesPollingInterval;
+        rejectExpiredStudiesPollingStartTime = arcdev.rejectExpiredStudiesPollingStartTime;
+        rejectExpiredStudiesFetchSize = arcdev.rejectExpiredStudiesFetchSize;
+        rejectExpiredSeriesFetchSize = arcdev.rejectExpiredSeriesFetchSize;
+        rejectExpiredStudiesAETitle = arcdev.rejectExpiredStudiesAETitle;
+        fallbackCMoveSCPStudyOlderThan = arcdev.fallbackCMoveSCPStudyOlderThan;
+        storePermissionServiceURL = arcdev.storePermissionServiceURL;
+        storePermissionServiceResponsePattern = arcdev.storePermissionServiceResponsePattern;
+        storePermissionServiceExpirationDatePattern = arcdev.storePermissionServiceExpirationDatePattern;
+        storePermissionServiceErrorCommentPattern = arcdev.storePermissionServiceErrorCommentPattern;
+        storePermissionServiceErrorCodePattern = arcdev.storePermissionServiceErrorCodePattern;
+        storePermissionCacheStaleTimeout = arcdev.storePermissionCacheStaleTimeout;
+        storePermissionCacheSize = arcdev.storePermissionCacheSize;
+        mergeMWLCacheStaleTimeout = arcdev.mergeMWLCacheStaleTimeout;
+        mergeMWLCacheSize = arcdev.mergeMWLCacheSize;
+        storeUpdateDBMaxRetries = arcdev.storeUpdateDBMaxRetries;
+        storeUpdateDBMaxRetryDelay = arcdev.storeUpdateDBMaxRetryDelay;
+        allowRejectionForDataRetentionPolicyExpired = arcdev.allowRejectionForDataRetentionPolicyExpired;
+        acceptMissingPatientID = arcdev.acceptMissingPatientID;
+        allowDeleteStudyPermanently = arcdev.allowDeleteStudyPermanently;
+        retrieveAETitles = arcdev.retrieveAETitles;
+        remapRetrieveURL = arcdev.remapRetrieveURL;
+        remapRetrieveURLClientHost = arcdev.remapRetrieveURLClientHost;
+        hl7PSUSendingApplication = arcdev.hl7PSUSendingApplication;
+        hl7PSUReceivingApplications = arcdev.hl7PSUReceivingApplications;
+        hl7PSUDelay = arcdev.hl7PSUDelay;
+        hl7PSUTimeout = arcdev.hl7PSUTimeout;
+        hl7PSUOnTimeout = arcdev.hl7PSUOnTimeout;
+        hl7PSUTaskPollingInterval = arcdev.hl7PSUTaskPollingInterval;
+        hl7PSUTaskFetchSize = arcdev.hl7PSUTaskFetchSize;
+        hl7PSUMWL = arcdev.hl7PSUMWL;
+        acceptConflictingPatientID = arcdev.acceptConflictingPatientID;
         attributeFilters.clear();
         attributeFilters.putAll(arcdev.attributeFilters);
+        metadataFilters.clear();
+        metadataFilters.putAll(arcdev.metadataFilters);
+        idGenerators.clear();
+        idGenerators.putAll(arcdev.idGenerators);
         storageDescriptorMap.clear();
         storageDescriptorMap.putAll(arcdev.storageDescriptorMap);
         queueDescriptorMap.clear();
@@ -756,10 +1473,22 @@ public class ArchiveDeviceExtension extends DeviceExtension {
         exporterDescriptorMap.putAll(arcdev.exporterDescriptorMap);
         exportRules.clear();
         exportRules.addAll(arcdev.exportRules);
+        rsForwardRules.clear();
+        rsForwardRules.addAll(arcdev.rsForwardRules);
+        hl7ForwardRules.clear();
+        hl7ForwardRules.addAll(arcdev.hl7ForwardRules);
+        hl7OrderScheduledStations.clear();
+        hl7OrderScheduledStations.addAll(arcdev.hl7OrderScheduledStations);
+        hl7OrderSPSStatuses.clear();
+        hl7OrderSPSStatuses.putAll(arcdev.hl7OrderSPSStatuses);
         compressionRules.clear();
         compressionRules.addAll(arcdev.compressionRules);
+        studyRetentionPolicies.clear();
+        studyRetentionPolicies.addAll(arcdev.studyRetentionPolicies);
         attributeCoercions.clear();
         attributeCoercions.addAll(arcdev.attributeCoercions);
+        storeAccessControlIDRules.clear();
+        storeAccessControlIDRules.addAll(arcdev.storeAccessControlIDRules);
         rejectionNoteMap.clear();
         rejectionNoteMap.putAll(arcdev.rejectionNoteMap);
     }

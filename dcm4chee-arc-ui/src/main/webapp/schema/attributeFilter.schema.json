@@ -1,5 +1,5 @@
 {
-  "title": "Attribute List",
+  "title": "Attribute Filter",
   "description": "Attributes stored in the database",
   "type": "object",
   "required": [
@@ -9,14 +9,15 @@
   "properties": {
     "dcmEntity": {
       "title": "Attribute Entity",
-      "description": "Entity of the Attribute Filter or Export Rule ('Patient', 'Study', 'Series', 'Instance', 'MPPS').",
+      "description": "Entity of the Attribute Filter or Export Rule ('Patient', 'Study', 'Series', 'Instance', 'MPPS', 'MWL').",
       "type": "string",
       "enum": [
         "Patient",
         "Study",
         "Series",
         "Instance",
-        "MPPS"
+        "MPPS",
+        "MWL"
       ]
     },
     "dcmTag": {
@@ -42,7 +43,7 @@
     },
     "dcmAttributeUpdatePolicy": {
       "title": "Attribute Update Policy",
-      "description": "Specifies update policy for extracted attributes into the DB on Series, Study & Patient level on receive of further instance of the entity. If absent, the attributes will not be updated",
+      "description": "Specifies update policy for extracted attributes into the DB on Series, Study & Patient level on receive of further instance of the entity. Enumerated values: SUPPLEMENT, MERGE, OVERWRITE. If absent, the attributes will not be updated",
       "type": "string",
       "enum": [
         "SUPPLEMENT",

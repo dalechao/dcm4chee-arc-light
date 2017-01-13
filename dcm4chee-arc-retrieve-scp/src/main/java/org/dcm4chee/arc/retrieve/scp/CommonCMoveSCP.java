@@ -64,6 +64,7 @@ import java.util.*;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
+ * @author Vrinda Nayak <vrinda.nayak@j4care.com>
  * @since Aug 2015
  */
 class CommonCMoveSCP extends BasicCMoveSCP {
@@ -89,59 +90,78 @@ class CommonCMoveSCP extends BasicCMoveSCP {
     @Override
     protected RetrieveTask calculateMatches(Association as, PresentationContext pc, Attributes rq, Attributes keys)
             throws DicomServiceException {
+        LOG.debug("{}: Process C-MOVE RQ:\n{}", as, keys);
         EnumSet<QueryOption> queryOpts = as.getQueryOptionsFor(rq.getString(Tag.AffectedSOPClassUID));
         QueryRetrieveLevel2 qrLevel = QueryRetrieveLevel2.validateRetrieveIdentifier(
                 keys, qrLevels, queryOpts.contains(QueryOption.RELATIONAL));
-        RetrieveContext ctx = newRetrieveContext(as, rq, qrLevel, keys);
-        ArchiveAEExtension arcAE = ctx.getArchiveAEExtension();
-        ArrayList<String> failedIUIDs = new ArrayList<>();
+        ArchiveAEExtension arcAE = as.getApplicationEntity().getAEExtension(ArchiveAEExtension.class);
+        if (!arcAE.isAcceptedMoveDestination(rq.getString(Tag.MoveDestination)))
+            throw new DicomServiceException(RetrieveService.MOVE_DESTINATION_NOT_ALLOWED,
+                    RetrieveService.MOVE_DESTINATION_NOT_ALLOWED_MSG);
+
+        RetrieveContext ctx = newRetrieveContext(arcAE, as, rq, qrLevel, keys);
         String fallbackCMoveSCP = arcAE.fallbackCMoveSCP();
         String fallbackCMoveSCPDestination = arcAE.fallbackCMoveSCPDestination();
         if (!retrieveService.calculateMatches(ctx)) {
             if (fallbackCMoveSCP == null)
                 return null;
 
+            ctx.setRetryFailedRetrieve(true);
             LOG.info("{}: No objects of study{} found - forward C-MOVE RQ to {}",
                     as, Arrays.toString(ctx.getStudyInstanceUIDs()), fallbackCMoveSCP);
             return moveSCU.newForwardRetrieveTask(ctx, pc, rq, keys, fallbackCMoveSCP, fallbackCMoveSCPDestination);
-        } else if (fallbackCMoveSCP != null && fallbackCMoveSCPDestination != null
-                && retryFailedRetrieve(ctx, qrLevel)) {
-            LOG.info("{}: Some objects of study{} not found - retry forward C-MOVE RQ to {}",
-                    as, Arrays.toString(ctx.getStudyInstanceUIDs()), fallbackCMoveSCP);
-            return moveSCU.newForwardRetrieveTask(ctx, pc, rq, keys, fallbackCMoveSCP, fallbackCMoveSCPDestination);
         }
-
+        Map<String, Collection<InstanceLocations>> notAccessable = retrieveService.removeNotAccessableMatches(ctx);
         String altCMoveSCP = arcAE.alternativeCMoveSCP();
-        if (altCMoveSCP != null) {
-            Collection<InstanceLocations> notAccessable = retrieveService.removeNotAccessableMatches(ctx);
-            if (ctx.getMatches().isEmpty()) {
-                LOG.info("{}: Requested objects not locally accessable - forward C-MOVE RQ to {}",
-                        as, altCMoveSCP);
-                return moveSCU.newForwardRetrieveTask(ctx, pc, rq, keys, altCMoveSCP, null);
+        if (ctx.getMoveOriginatorAETitle().equals(altCMoveSCP)) {
+            // mask altCMoveSCP in Move Originator AET in C-STORE RQ - assume Destination originated Move RQ to altCMoveSCP
+            ctx.setMoveOriginatorAETitle(ctx.getDestinationAETitle());
+            // ignore not accessible matches - assume they are handled by altCMoveSCP
+            ctx.setNumberOfMatches(ctx.getMatches().size());
+        } else {
+            boolean retryFailedRetrieve = fallbackCMoveSCP != null
+                    && fallbackCMoveSCPDestination != null
+                    && retryFailedRetrieve(ctx, qrLevel);
+            Collection<InstanceLocations> notRetrieveable = notAccessable.remove(null); //TODO
+            Iterator<Map.Entry<String, Collection<InstanceLocations>>> notAccessableIter = notAccessable.entrySet().iterator();
+            if (notAccessableIter.hasNext()) {
+                Map.Entry<String, Collection<InstanceLocations>> notAccessableNext = notAccessableIter.next();
+                String otherCMoveSCP = notAccessableNext.getKey();
+                String otherMoveDest = otherCMoveSCP.equals(altCMoveSCP) ? null : arcAE.externalRetrieveAEDestination();
+                while (notAccessableIter.hasNext()) {
+                    LOG.info("{}: {} objects of study{} not locally accessable - send C-MOVE RQ to {}",
+                            as, notAccessableNext.getValue().size(), Arrays.toString(ctx.getStudyInstanceUIDs()),
+                            otherCMoveSCP);
+                    moveSCU.forwardMoveRQ(ctx, pc, rq, keys, otherCMoveSCP, otherMoveDest);
+                    notAccessableNext = notAccessableIter.next();
+                    otherCMoveSCP = notAccessableNext.getKey();
+                    otherMoveDest = otherCMoveSCP.equals(altCMoveSCP) ? null : arcAE.externalRetrieveAEDestination();
+                }
+                LOG.info("{}: {} objects of study{} not locally accessable - send C-MOVE RQ to {}",
+                    as, notAccessableNext.getValue().size(), Arrays.toString(ctx.getStudyInstanceUIDs()),
+                    otherCMoveSCP);
+                if (!retryFailedRetrieve && ctx.getMatches().isEmpty()) {
+                    return moveSCU.newForwardRetrieveTask(ctx, pc, rq, keys, otherCMoveSCP, otherMoveDest);
+                }
+                moveSCU.forwardMoveRQ(ctx, pc, rq, keys, otherCMoveSCP, otherMoveDest);
             }
+            if (retryFailedRetrieve) {
+                ctx.setRetryFailedRetrieve(true);
+                LOG.info("{}: Some objects of study{} not found - retry forward C-MOVE RQ to {}",
+                        as, Arrays.toString(ctx.getStudyInstanceUIDs()), fallbackCMoveSCP);
+                if (ctx.getMatches().isEmpty())
+                    return moveSCU.newForwardRetrieveTask(ctx, pc, rq, keys, fallbackCMoveSCP, fallbackCMoveSCPDestination);
 
-            if (!notAccessable.isEmpty()) {
-                LOG.warn("{}: {} of {} requested objects not locally accessable",
-                        as, notAccessable.size(), ctx.getNumberOfMatches());
-                for (InstanceLocations remoteMatch : notAccessable)
-                    ctx.addFailedSOPInstanceUID(remoteMatch.getSopInstanceUID());
-            }
-        }
-        if (!failedIUIDs.isEmpty()) {
-            if (ctx.getSopInstanceUIDs().length > 0)
-                failedIUIDs.retainAll(Arrays.asList(ctx.getSopInstanceUIDs()));
-            ctx.incrementNumberOfMatches(failedIUIDs.size());
-            for (String failedIUID : failedIUIDs) {
-                ctx.addFailedSOPInstanceUID(failedIUID);
+                moveSCU.forwardMoveRQ(ctx, pc, rq, keys, fallbackCMoveSCP, fallbackCMoveSCPDestination);
             }
         }
         return storeSCU.newRetrieveTaskMOVE(as, pc, rq, ctx);
     }
 
-    private RetrieveContext newRetrieveContext(Association as, Attributes rq, QueryRetrieveLevel2 qrLevel,
-                                               Attributes keys) throws DicomServiceException {
+    private RetrieveContext newRetrieveContext(ArchiveAEExtension arcAE,
+           Association as, Attributes rq, QueryRetrieveLevel2 qrLevel, Attributes keys) throws DicomServiceException {
         try {
-            return retrieveService.newRetrieveContextMOVE(as, rq, qrLevel, keys);
+            return retrieveService.newRetrieveContextMOVE(arcAE, as, rq, qrLevel, keys);
         } catch (ConfigurationNotFoundException e) {
             throw new DicomServiceException(Status.MoveDestinationUnknown, e.getMessage());
         } catch (ConfigurationException e) {
